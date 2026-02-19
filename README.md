@@ -1,5 +1,5 @@
-`notes`: A small CLI note taking tool with your favorite editor
-======================================================
+`notes`: CLI tool for taking & managing notes in Markdown format
+==============================================================
 
 This is a small CLI tool for note taking in terminal with your favorite editor.
 You can manage (create/open/list) notes via this tool on terminal.

@@ -20,19 +20,13 @@ type Cmd interface {
 	Do() error
 }
 
-// Version is version string of notes command. It conforms semantic versioning
-var Version = "1.6.2"
+// Version is the version string of notes command. It conforms to semantic versioning
+var version = "1.0.0"
 var description = `Simple note taking tool for command line with your favorite editor.
 
-You can manage (create/open/list/find) notes via this tool on terminal. notes also
-optionally can save your notes thanks to Git to avoid losing your notes.
+You can manage (create/open/list/find) notes via this tool on terminal. notes also optionally can save your notes thanks to Git to avoid losing your notes.
 
-notes is intended to be used nicely with other commands such as grep (or ag, rg),
-rm, filtering tools such as fzf or peco and editors which can be started from
-command line.
-
-notes is developed at https://github.com/naterator/notes. If you're seeing a bug or having a feature request,
-please create a new issue. Pull requests are more than welcome.`
+notes is developed at https://github.com/naterator/notes. If you see a bug or have a feature request, please create a new issue. Pull requests are more than welcome.`
 
 // ParseCmd parses given arguments as command line options and returns corresponding subcommand instance.
 // When no subcommand matches or argus contains invalid argument, it returns an error
@@ -41,8 +35,8 @@ func ParseCmd(args []string) (Cmd, error) {
 	noColor := cli.Flag("no-color", "Disable color output").Bool()
 	colorAlways := cli.Flag("color-always", "Enable color output always").Short('A').Bool()
 
-	cli.Version(Version)
-	cli.Author("rhysd <https://github.com/rhysd>")
+	cli.Version(version)
+	cli.Author("naterator <https://github.com/naterator>")
 	cli.HelpFlag.Short('h')
 
 	c, err := NewConfig()
