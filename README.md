@@ -32,7 +32,7 @@ $ go install github.com/naterator/notes/cmd/notes@latest
 - Open existing note by `notes ls -e` and your favorite editor. `$NOTES_EDITOR` (or `EDITOR` as fallback) must be set.
 - Check existing notes on terminal with `notes ls -o` (`-o` means showing one line information for
   each note).
-- Find notes by title with `notes find <title-query>`, and optionally narrow matches with `notes find <title-query> <within-query>`.
+- Find notes by query with `notes find <query>`. It searches title, tags, metadata, and body text with case-insensitive matching.
 
 Directories structure under notes home is something like:
 
@@ -68,7 +68,7 @@ This section describes detailed usages for each operation.
   - [Usage](#usage)
     - [Create a new note](#create-a-new-note)
     - [Flexibly open notes you created](#flexibly-open-notes-you-created)
-    - [Find notes by title and text](#find-notes-by-title-and-text)
+    - [Find notes by query](#find-notes-by-query)
     - [Check notes you created as list](#check-notes-you-created-as-list)
     - [Note Templates](#note-templates)
     - [Save notes to Git repository](#save-notes-to-git-repository)
@@ -209,18 +209,18 @@ $ note ls --sort modified | head -1 | xargs -o vim
 For more details, please check `notes list --help`.
 
 
-### Find notes by title and text
+### Find notes by query
 
-`notes find` searches note titles with case-insensitive substring matching.
-
-```
-$ notes find title
-```
-
-You can pass a second query to narrow the result by searching metadata and body text.
+`notes find` searches notes with case-insensitive matching across title, tags, metadata, and body text.
 
 ```
-$ notes find title documentation
+$ notes find commands
+```
+
+`find` also supports fuzzy matching for near matches when exact substring matching misses.
+
+```
+$ notes find cmnds
 ```
 
 By default, `find` outputs one-line summaries (`path tags title`) in created-date order.
@@ -228,9 +228,9 @@ By default, `find` outputs one-line summaries (`path tags title`) in created-dat
 You can tune the output/order with options:
 
 ```
-$ notes find title --sort filename
-$ notes find title --relative
-$ notes find title --edit
+$ notes find commands --sort filename
+$ notes find commands --relative
+$ notes find commands --edit
 ```
 
 

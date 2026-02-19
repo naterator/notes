@@ -45,7 +45,7 @@ func (cmd *SelfupdateCmd) Do() error {
 		return errors.Wrap(err, "Cannot detect version from GitHub")
 	}
 
-	v := semver.MustParse(version)
+	v := semver.MustParse(Version)
 	if !found || latest.Version.LTE(v) {
 		fmt.Fprintln(cmd.Out, "Current version is the latest")
 		return nil

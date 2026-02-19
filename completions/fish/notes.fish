@@ -7,7 +7,7 @@ complete -c notes -l version -d "Show application version."
 # Subcommands
 complete -c notes -n '__fish_use_subcommand' -xa 'help' -d "Show help."
 complete -c notes -n '__fish_use_subcommand' -xa 'new' -d "Create a new note with given category and file name"
-complete -c notes -n '__fish_use_subcommand' -xa 'find' -d "Find notes by title and optionally by metadata/body text"
+complete -c notes -n '__fish_use_subcommand' -xa 'find' -d "Find notes by query in title, tags, metadata and body text"
 complete -c notes -n '__fish_use_subcommand' -xa 'list' -d "List notes with filtering by categories and/or tags with regular expressions. By default, it shows full path of notes (alias: ls)"
 complete -c notes -n '__fish_use_subcommand' -xa 'ls' -d "List notes with filtering by categories and/or tags with regular expressions. By default, it shows full path of notes (alias: ls)"
 complete -c notes -n '__fish_use_subcommand' -xa 'categories' -d "List all categories to stdout (alias: cats)"
@@ -46,7 +46,7 @@ complete -c notes -n '__fish_seen_subcommand_from config' -xa 'git' -d "Git comm
 
 complete -c notes -n '__fish_seen_subcommand_from help' -xa 'help' -d "Show help."
 complete -c notes -n '__fish_seen_subcommand_from help' -xa 'new' -d "Create a new note with given category and file name"
-complete -c notes -n '__fish_seen_subcommand_from help' -xa 'find' -d "Find notes by title and optionally by metadata/body text"
+complete -c notes -n '__fish_seen_subcommand_from help' -xa 'find' -d "Find notes by query in title, tags, metadata and body text"
 complete -c notes -n '__fish_seen_subcommand_from help' -xa 'list' -d "List notes with filtering by categories and/or tags with regular expressions. By default, it shows full path of notes (alias: ls)"
 complete -c notes -n '__fish_seen_subcommand_from help' -xa 'ls' -d "List notes with filtering by categories and/or tags with regular expressions. By default, it shows full path of notes (alias: ls)"
 complete -c notes -n '__fish_seen_subcommand_from help' -xa 'categories' -d "List all categories to stdout (alias: cats)"

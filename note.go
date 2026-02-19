@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mattn/go-runewidth"
 	"github.com/pkg/errors"
 )
 
@@ -107,8 +106,7 @@ func (note *Note) Create() error {
 	if title == "" {
 		title = strings.TrimSuffix(note.File, filepath.Ext(note.File))
 	}
-	b.WriteString(title + "\n")
-	b.WriteString(strings.Repeat("=", runewidth.StringWidth(title)) + "\n")
+	b.WriteString("# " + title + "\n")
 
 	if template != nil && bytes.HasPrefix(template, []byte("-->")) {
 		// User expects metadata to be commented out. Start to surround metadata with comment
@@ -117,7 +115,12 @@ func (note *Note) Create() error {
 
 	// Write metadata
 	fmt.Fprintf(&b, "- Category: %s\n", note.Category)
-	fmt.Fprintf(&b, "- Tags: %s\n", strings.Join(note.Tags, ", "))
+	tagsStr := strings.Join(note.Tags, ", ")
+	if tagsStr != "" {
+		fmt.Fprintf(&b, "- Tags: %s\n", tagsStr)
+	} else {
+		fmt.Fprintf(&b, "- Tags:\n")
+	}
 	fmt.Fprintf(&b, "- Created: %s\n", note.Created.Format(time.RFC3339))
 
 	if len(template) > 0 {
@@ -295,7 +298,15 @@ func LoadNote(path string, cfg *Config) (*Note, error) {
 		line := s.Text()
 		// First line is title
 		if !titleFound {
-			if reTitleBar.MatchString(line) {
+			if strings.HasPrefix(line, "# ") {
+				// ATX-style H1
+				note.Title = strings.TrimSpace(line[2:])
+				if note.Title == "" {
+					note.Title = "(no title)"
+				}
+				titleFound = true
+			} else if reTitleBar.MatchString(line) {
+				// Setext-style H1 underline
 				if note.Title == "" {
 					note.Title = "(no title)"
 				}
@@ -330,7 +341,7 @@ func LoadNote(path string, cfg *Config) (*Note, error) {
 	}
 
 	if !titleFound {
-		return nil, errors.Errorf("No title found in note '%s'. Didn't you use '====' bar for h1 title?", canonPath(path))
+		return nil, errors.Errorf("No title found in note '%s'. Use ATX-style '# Title' for the h1 heading", canonPath(path))
 	}
 
 	if note.Category == "" || note.Tags == nil || note.Created.IsZero() {

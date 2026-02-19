@@ -150,54 +150,49 @@ func TestCreateNoteFile(t *testing.T) {
 		{
 			note: check(NewNote("cat1", "foo,bar", "create-normal", "this is title", cfg)),
 			want: heredoc(`
-				this is title
-				=============
+				# this is title
 				- Category: cat1
 				- Tags: foo, bar
 				- Created: {{created}}
-				
+
 				`),
 		},
 		{
 			note: check(NewNote("cat1", "foo,bar", "create-title-is-empty", "", cfg)),
 			want: heredoc(`
-				create-title-is-empty
-				=====================
+				# create-title-is-empty
 				- Category: cat1
 				- Tags: foo, bar
 				- Created: {{created}}
-				
+
 				`),
 		},
 		{
 			note: check(NewNote("cat1", "foo", "create-one-tag", "this is title", cfg)),
 			want: heredoc(`
-				this is title
-				=============
+				# this is title
 				- Category: cat1
 				- Tags: foo
 				- Created: {{created}}
-				
+
 				`),
 		},
 		{
 			note: check(NewNote("cat1", "", "create-no-tag", "this is title", cfg)),
 			want: heredoc(`
-				this is title
-				=============
+				# this is title
 				- Category: cat1
-				- Tags: 
+				- Tags:
 				- Created: {{created}}
-				
+
 				`),
 		},
 		{
 			note: check(NewNote("with-template", "", "create-with-template", "this is title", cfg)),
 			want: heredoc(`
-				this is title
-				=============
+				# this is title
 				- Category: with-template
-				- Tags: 
+				- Tags:
 				- Created: {{created}}
 				!!!!!!!
 				This text was inserted via template
@@ -207,13 +202,12 @@ func TestCreateNoteFile(t *testing.T) {
 		{
 			note: check(NewNote("with-template2", "", "create-with-template", "this is title", cfg)),
 			want: heredoc(`
-				this is title
-				=============
+				# this is title
 				- Category: with-template2
-				- Tags: 
+				- Tags:
 				- Created: {{created}}
 				-------------
-				
+
 				!!!!!!!
 				This text was inserted via template
 				!!!!!!!
@@ -222,15 +216,14 @@ func TestCreateNoteFile(t *testing.T) {
 		{
 			note: check(NewNote("with-template-comment-metadata", "", "commentout-metadata-with-template", "this is title", cfg)),
 			want: heredoc(`
-				this is title
-				=============
+				# this is title
 				<!--
 				- Category: with-template-comment-metadata
-				- Tags: 
+				- Tags:
 				- Created: {{created}}
 				-->
 				-------------
-				
+
 				Metadata is commented out since template starts with '-->'
 				`),
 		},
@@ -238,13 +231,12 @@ func TestCreateNoteFile(t *testing.T) {
 			nestedHome: "template-at-home",
 			note:       check(NewNote("cat1", "", "create-with-template-at-home", "this is title", cfg)),
 			want: heredoc(`
-				this is title
-				=============
+				# this is title
 				- Category: cat1
-				- Tags: 
+				- Tags:
 				- Created: {{created}}
 				------
-				
+
 				Template at root was inserted
 				`),
 		},
@@ -252,13 +244,12 @@ func TestCreateNoteFile(t *testing.T) {
 			nestedHome: "template-at-home",
 			note:       check(NewNote("cat2", "", "prioritize-category-local-template", "this is title", cfg)),
 			want: heredoc(`
-				this is title
-				=============
+				# this is title
 				- Category: cat2
-				- Tags: 
+				- Tags:
 				- Created: {{created}}
 				------
-				
+
 				Template under cat2 was inserted
 				`),
 		},
