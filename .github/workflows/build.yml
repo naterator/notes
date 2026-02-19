@@ -34,3 +34,4 @@ jobs:
           md5sum: false
           asset_name: notes-${{ matrix.goos }}-${{ matrix.goarch }}
           compress_assets: false
+          project_path: ./cmd/notes
