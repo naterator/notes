@@ -149,7 +149,7 @@ func (note *Note) Create() error {
 }
 
 // Open opens the note using an editor command user set. When user did not set any editor command
-// with $NOTES_CLI_EDITOR, this method fails. Otherwise, an editor process is spawned with argument
+// with $NOTES_EDITOR, this method fails. Otherwise, an editor process is spawned with argument
 // of path to the note file
 func (note *Note) Open() error {
 	return openEditor(note.Config, note.FilePath())

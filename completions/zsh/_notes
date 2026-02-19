@@ -38,11 +38,11 @@ case $state in
             ;;
             find)
                 _arguments \
-                    '-r[Show relative paths from $NOTES_CLI_HOME directory]' \
-                    '--relative[Show relative paths from $NOTES_CLI_HOME directory]' \
+                    '-r[Show relative paths from $NOTES_HOME directory]' \
+                    '--relative[Show relative paths from $NOTES_HOME directory]' \
                     "--sort[Sort results by 'modified', 'created', 'filename' or 'category'. 'created' is default]" \
-                    '-e[Open listed notes with an editor. $NOTES_CLI_EDITOR must be set]' \
-                    '--edit[Open listed notes with an editor. $NOTES_CLI_EDITOR must be set]' \
+                    '-e[Open listed notes with an editor. $NOTES_EDITOR must be set]' \
+                    '--edit[Open listed notes with an editor. $NOTES_EDITOR must be set]' \
                     ${common_flags[@]} \
                     && ret=0
             ;;
@@ -53,13 +53,13 @@ case $state in
                     '--full[Show full information of note instead of path]' \
                     '--category=[Filter category name by regular expression]' \
                     '--tag=[Filter tag name by regular expression]' \
-                    '-r[Show relative paths from $NOTES_CLI_HOME directory]' \
-                    '--relative[Show relative paths from $NOTES_CLI_HOME directory]' \
+                    '-r[Show relative paths from $NOTES_HOME directory]' \
+                    '--relative[Show relative paths from $NOTES_HOME directory]' \
                     '-o[Show oneline information of note instead of path]' \
                     '--oneline[Show oneline information of note instead of path]' \
                     "--sort[Sort results by 'modified', 'created', 'filename' or 'category'. 'created' is default]" \
-                    '-e[Open listed notes with an editor. $NOTES_CLI_EDITOR must be set]' \
-                    '--edit[Open listed notes with an editor. $NOTES_CLI_EDITOR must be set]' \
+                    '-e[Open listed notes with an editor. $NOTES_EDITOR must be set]' \
+                    '--edit[Open listed notes with an editor. $NOTES_EDITOR must be set]' \
                     ${common_flags[@]} \
                     && ret=0
             ;;

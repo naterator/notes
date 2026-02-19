@@ -26,7 +26,7 @@ func TestParseArgs(t *testing.T) {
 	cwd, err := os.Getwd()
 	panicIfErr(err)
 	envs, err := tmpenv.Setenvs(map[string]string{
-		"NOTES_CLI_HOME": filepath.Join(cwd, "testdata", "list", "normal"),
+		"NOTES_HOME": filepath.Join(cwd, "testdata", "list", "normal"),
 	})
 	panicIfErr(err)
 	defer envs.Restore()

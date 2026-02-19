@@ -20,9 +20,9 @@ complete -c notes -n '__fish_use_subcommand' -xa 'selfupdate' -d "Update myself 
 # Flags for subcommands
 complete -c notes -n '__fish_seen_subcommand_from new' -l no-inline-input -d "Does not request inline input even if no editor is set"
 
-complete -c notes -n '__fish_seen_subcommand_from find' -s r -l relative -d 'Show relative paths from $NOTES_CLI_HOME directory'
+complete -c notes -n '__fish_seen_subcommand_from find' -s r -l relative -d 'Show relative paths from $NOTES_HOME directory'
 complete -c notes -n '__fish_seen_subcommand_from find' -l sort -d "Sort results by 'modified', 'created', 'filename' or 'category'. 'created' is default"
-complete -c notes -n '__fish_seen_subcommand_from find' -s e -l edit -d 'Open listed notes with an editor. $NOTES_CLI_EDITOR must be set'
+complete -c notes -n '__fish_seen_subcommand_from find' -s e -l edit -d 'Open listed notes with an editor. $NOTES_EDITOR must be set'
 
 complete -c notes -n '__fish_seen_subcommand_from ls list' -l no-inline-input -d "Does not request inline input even if no editor is set"
 complete -c notes -n '__fish_seen_subcommand_from ls list' -s f -l full -d "Show full information of note instead of path"
@@ -30,10 +30,10 @@ complete -c notes -n '__fish_seen_subcommand_from ls list' -l category -d "Filte
 complete -c notes -n '__fish_seen_subcommand_from ls list; and [ \'--category\' = (string split " " (commandline))[-2] ]' -xa (notes categories)
 complete -c notes -n '__fish_seen_subcommand_from ls list' -l tag -d "Filter tag name by regular expression"
 complete -c notes -n '__fish_seen_subcommand_from ls list; and [ \'--tag\' = (string split " " (commandline))[-2] ]' -xa (notes tags)
-complete -c notes -n '__fish_seen_subcommand_from ls list' -s r -l relative -d 'Show relative paths from $NOTES_CLI_HOME directory'
+complete -c notes -n '__fish_seen_subcommand_from ls list' -s r -l relative -d 'Show relative paths from $NOTES_HOME directory'
 complete -c notes -n '__fish_seen_subcommand_from ls list' -s o -l oneline -d "Show oneline information of note instead of path"
 complete -c notes -n '__fish_seen_subcommand_from ls list' -l sort -d "Sort results by 'modified', 'created', 'filename' or 'category'. 'created' is default"
-complete -c notes -n '__fish_seen_subcommand_from ls list' -s e -l edit -d 'Open listed notes with an editor. $NOTES_CLI_EDITOR must be set'
+complete -c notes -n '__fish_seen_subcommand_from ls list' -s e -l edit -d 'Open listed notes with an editor. $NOTES_EDITOR must be set'
 
 complete -c notes -n '__fish_seen_subcommand_from save' -l message -d "Commit message on save"
 

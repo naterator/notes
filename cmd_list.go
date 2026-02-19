@@ -4,15 +4,16 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/fatih/color"
-	"github.com/mattn/go-runewidth"
-	"github.com/pkg/errors"
-	"gopkg.in/alecthomas/kingpin.v2"
 	"io"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/fatih/color"
+	"github.com/mattn/go-runewidth"
+	"github.com/pkg/errors"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 var (
@@ -49,10 +50,10 @@ func (cmd *ListCmd) defineListCLI(c *kingpin.CmdClause) {
 	c.Flag("full", "Show list of full information of note (full path, metadata, title, body (up to 10 lines)) instead of file path").Short('f').BoolVar(&cmd.Full)
 	c.Flag("category", "Filter list by category name with regular expression").Short('c').StringVar(&cmd.Category)
 	c.Flag("tag", "Filter list by tag name with regular expression").Short('t').StringVar(&cmd.Tag)
-	c.Flag("relative", "Show relative paths from $NOTES_CLI_HOME directory").Short('r').BoolVar(&cmd.Relative)
+	c.Flag("relative", "Show relative paths from $NOTES_HOME directory").Short('r').BoolVar(&cmd.Relative)
 	c.Flag("oneline", "Show oneline information of note (relative path, category, tags, title) instead of file path").Short('o').BoolVar(&cmd.Oneline)
 	c.Flag("sort", "Sort list by 'modified', 'created', 'filename' or 'category'. Default is 'created'").Short('s').EnumVar(&cmd.SortBy, "modified", "created", "filename", "category")
-	c.Flag("edit", "Open listed notes with your favorite editor. $NOTES_CLI_EDITOR must be set. Paths of listed notes are passed to the editor command's arguments").Short('e').BoolVar(&cmd.Edit)
+	c.Flag("edit", "Open listed notes with your favorite editor. $NOTES_EDITOR must be set. Paths of listed notes are passed to the editor command's arguments").Short('e').BoolVar(&cmd.Edit)
 }
 
 func (cmd *ListCmd) defineCLI(app *kingpin.Application) {

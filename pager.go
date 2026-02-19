@@ -1,11 +1,12 @@
 package notes
 
 import (
-	"github.com/kballard/go-shellquote"
-	"github.com/pkg/errors"
 	"io"
 	"os"
 	"os/exec"
+
+	"github.com/kballard/go-shellquote"
+	"github.com/pkg/errors"
 )
 
 // PagerWriter is a wrapper of pager command to paging output to writer with pager command such as
@@ -48,7 +49,7 @@ func (pager *PagerWriter) Write(p []byte) (int, error) {
 func StartPagerWriter(pagerCmd string, stdout io.Writer) (*PagerWriter, error) {
 	cmdline, err := shellquote.Split(pagerCmd)
 	if err != nil {
-		return nil, errors.Wrap(err, "Cannot parsing $NOTES_CLI_PAGER as shell command line")
+		return nil, errors.Wrap(err, "Cannot parsing $NOTES_PAGER as shell command line")
 	}
 
 	cmd := exec.Command(cmdline[0], cmdline[1:]...)
@@ -57,11 +58,11 @@ func StartPagerWriter(pagerCmd string, stdout io.Writer) (*PagerWriter, error) {
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return nil, errors.Wrap(err, "Cannot create pipe stdin to pager command. Please check $NOTES_CLI_PAGER")
+		return nil, errors.Wrap(err, "Cannot create pipe stdin to pager command. Please check $NOTES_PAGER")
 	}
 
 	if err = cmd.Start(); err != nil {
-		err = errors.Wrapf(err, "Cannot start pager command '%s'. Please check $NOTES_CLI_PAGER is correct", pagerCmd)
+		err = errors.Wrapf(err, "Cannot start pager command '%s'. Please check $NOTES_PAGER is correct", pagerCmd)
 	}
 
 	return &PagerWriter{

@@ -33,9 +33,9 @@ func (cmd *FindCmd) defineCLI(app *kingpin.Application) {
 	cmd.cli = app.Command("find", "Find notes by title and optionally by metadata/body text")
 	cmd.cli.Arg("title-query", "Query string to search in note titles").Required().StringVar(&cmd.TitleQuery)
 	cmd.cli.Arg("within-query", "Optional query string to search in note metadata and body").StringVar(&cmd.WithinQuery)
-	cmd.cli.Flag("relative", "Show relative paths from $NOTES_CLI_HOME directory").Short('r').BoolVar(&cmd.Relative)
+	cmd.cli.Flag("relative", "Show relative paths from $NOTES_HOME directory").Short('r').BoolVar(&cmd.Relative)
 	cmd.cli.Flag("sort", "Sort list by 'modified', 'created', 'filename' or 'category'. Default is 'created'").Short('s').EnumVar(&cmd.SortBy, "modified", "created", "filename", "category")
-	cmd.cli.Flag("edit", "Open listed notes with your favorite editor. $NOTES_CLI_EDITOR must be set. Paths of listed notes are passed to the editor command's arguments").Short('e').BoolVar(&cmd.Edit)
+	cmd.cli.Flag("edit", "Open listed notes with your favorite editor. $NOTES_EDITOR must be set. Paths of listed notes are passed to the editor command's arguments").Short('e').BoolVar(&cmd.Edit)
 }
 
 func (cmd *FindCmd) matchesCmdline(cmdline string) bool {

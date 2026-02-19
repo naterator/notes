@@ -10,12 +10,12 @@ import (
 
 func openEditor(config *Config, paths ...string) error {
 	if config.EditorCmd == "" {
-		return errors.New("Editor is not set. To open note in editor, please set $NOTES_CLI_EDITOR or $EDITOR")
+		return errors.New("Editor is not set. To open note in editor, please set $NOTES_EDITOR or $EDITOR")
 	}
 
 	cmdline, err := shellquote.Split(config.EditorCmd)
 	if err != nil {
-		return errors.Wrap(err, "Cannot parse editor command line. Please check $NOTES_CLI_EDITOR or $EDITOR")
+		return errors.Wrap(err, "Cannot parse editor command line. Please check $NOTES_EDITOR or $EDITOR")
 	}
 
 	editor := cmdline[0]

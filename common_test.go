@@ -12,10 +12,10 @@ import (
 // Precondition for tests
 func init() {
 	for _, env := range []string{
-		"NOTES_CLI_HOME",
-		"NOTES_CLI_GIT",
-		"NOTES_CLI_EDITOR",
-		"NOTES_CLI_PAGER",
+		"NOTES_HOME",
+		"NOTES_GIT",
+		"NOTES_EDITOR",
+		"NOTES_PAGER",
 		"EDITOR",
 		"XDG_DATA_HOME",
 		"PAGER",

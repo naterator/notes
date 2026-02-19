@@ -15,12 +15,12 @@ import (
 
 func testNewConfigEnvGuard() *tmpenv.Envguard {
 	g, err := tmpenv.Unset(
-		"NOTES_CLI_HOME",
+		"NOTES_HOME",
 		"XDG_DATA_HOME",
 		"APPLOCALDATA",
-		"NOTES_CLI_GIT",
-		"NOTES_CLI_EDITOR",
-		"NOTES_CLI_PAGER",
+		"NOTES_GIT",
+		"NOTES_EDITOR",
+		"NOTES_PAGER",
 		"EDITOR",
 		"PAGER",
 	)
@@ -87,9 +87,9 @@ func TestNewConfigCustomizeBinaryPaths(t *testing.T) {
 	ls, err := exec.LookPath("ls")
 	panicIfErr(err)
 	qls := shellquote.Join(ls) // On Windows, it may contain 'Program Files'
-	os.Setenv("NOTES_CLI_GIT", ls)
-	os.Setenv("NOTES_CLI_EDITOR", qls)
-	os.Setenv("NOTES_CLI_PAGER", qls)
+	os.Setenv("NOTES_GIT", ls)
+	os.Setenv("NOTES_EDITOR", qls)
+	os.Setenv("NOTES_PAGER", qls)
 
 	c, err := NewConfig()
 	if err != nil {
@@ -108,9 +108,9 @@ func TestNewConfigCustomizeBinaryPaths(t *testing.T) {
 		t.Fatal("Pager is unexpected:", c.PagerCmd, "wanted:", qls)
 	}
 
-	os.Unsetenv("NOTES_CLI_EDITOR")
+	os.Unsetenv("NOTES_EDITOR")
 	os.Setenv("EDITOR", qls)
-	os.Unsetenv("NOTES_CLI_PAGER")
+	os.Unsetenv("NOTES_PAGER")
 	os.Setenv("PAGER", qls)
 
 	c, err = NewConfig()
@@ -130,9 +130,9 @@ func TestNewConfigDisableBySettingEmpty(t *testing.T) {
 	g := testNewConfigEnvGuard()
 	defer func() { panicIfErr(g.Restore()) }()
 
-	os.Setenv("NOTES_CLI_PAGER", "")
-	os.Setenv("NOTES_CLI_GIT", "")
-	os.Setenv("NOTES_CLI_EDITOR", "")
+	os.Setenv("NOTES_PAGER", "")
+	os.Setenv("NOTES_GIT", "")
+	os.Setenv("NOTES_EDITOR", "")
 	os.Setenv("EDITOR", "vim")
 	os.Setenv("PAGER", "less")
 
@@ -159,7 +159,7 @@ func TestNewConfigCustomizeHome(t *testing.T) {
 		home string
 	}{
 		{
-			key:  "NOTES_CLI_HOME",
+			key:  "NOTES_HOME",
 			val:  "test-config-home",
 			home: "test-config-home",
 		},
@@ -210,7 +210,7 @@ func TestNewConfigGitNotFound(t *testing.T) {
 	g := testNewConfigEnvGuard()
 	defer func() { panicIfErr(g.Restore()) }()
 
-	panicIfErr(os.Setenv("NOTES_CLI_GIT", "/path/to/unknown-command"))
+	panicIfErr(os.Setenv("NOTES_GIT", "/path/to/unknown-command"))
 
 	c, err := NewConfig()
 	if err != nil {
@@ -230,7 +230,7 @@ func TestNewConfigCannotCreateHome(t *testing.T) {
 	g := testNewConfigEnvGuard()
 	defer func() { panicIfErr(g.Restore()) }()
 
-	panicIfErr(os.Setenv("NOTES_CLI_HOME", filepath.FromSlash("/invalid-dir-for-notes-test")))
+	panicIfErr(os.Setenv("NOTES_HOME", filepath.FromSlash("/invalid-dir-for-notes-test")))
 
 	_, err := NewConfig()
 	if err == nil {
@@ -251,7 +251,7 @@ func TestNewConfigExpandTilde(t *testing.T) {
 	g := testNewConfigEnvGuard()
 	defer func() { panicIfErr(g.Restore()) }()
 
-	panicIfErr(os.Setenv("NOTES_CLI_HOME", filepath.Join("~", strings.TrimPrefix(cwd, u.HomeDir))))
+	panicIfErr(os.Setenv("NOTES_HOME", filepath.Join("~", strings.TrimPrefix(cwd, u.HomeDir))))
 	c, err := NewConfig()
 	if err != nil {
 		t.Fatal(err)

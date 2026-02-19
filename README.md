@@ -29,7 +29,7 @@ $ go install github.com/naterator/notes/cmd/notes@latest
 
 - Create a new note with `notes new <category> <filename> [<tags>]`. Every note must have one category
   and it can have zero or more tags.
-- Open existing note by `notes ls -e` and your favorite editor. `$NOTES_CLI_EDITOR` (or `EDITOR` as fallback) must be set.
+- Open existing note by `notes ls -e` and your favorite editor. `$NOTES_EDITOR` (or `EDITOR` as fallback) must be set.
 - Check existing notes on terminal with `notes ls -o` (`-o` means showing one line information for
   each note).
 - Find notes by title with `notes find <title-query>`, and optionally narrow matches with `notes find <title-query> <within-query>`.
@@ -51,7 +51,7 @@ Directories structure under notes home is something like:
 ```
 
 where `<HOME>` is [XDG Data directory][xdg-dirs] (on macOS, `~/.local/share/notes`) by default
-and can be specified by `$NOTES_CLI_HOME` environment variable. 
+and can be specified by `$NOTES_HOME` environment variable. 
 
 You can see more practical example home directory at [example directory](./example/notes).
 
@@ -61,7 +61,7 @@ You can see more practical example home directory at [example directory](./examp
 
 This section describes detailed usages for each operation.
 
-- [`notes`: A small CLI note taking tool with your favorite editor](#notes-a-small-cli-note-taking-tool-with-your-favorite-editor)
+- [`notes`: CLI tool for taking \& managing notes in Markdown format](#notes-cli-tool-for-taking--managing-notes-in-markdown-format)
   - [Table of Contents](#table-of-contents)
   - [Installation](#installation)
   - [Basic Usage](#basic-usage)
@@ -113,7 +113,7 @@ Tags can be omitted.
 
 Category and file name cannot start with `.` not to make hidden files/directories.
 
-If you set your favorite editor to `$NOTES_CLI_EDITOR` environment variable, it opens the newly
+If you set your favorite editor to `$NOTES_EDITOR` environment variable, it opens the newly
 created note file with it. You can seamlessly edit the file. (If it is not set, `$EDITOR` is also
 referred.)
 
@@ -164,7 +164,7 @@ For example, now there is only one note so it shows one path
 ```
 
 Note that `/Users/<NAME>/.local/share` is a default XDG data directory on macOS or Linux and you can
-change it by setting `$NOTES_CLI_HOME` environment variable.
+change it by setting `$NOTES_HOME` environment variable.
 
 To open the listed notes with your editor, `--edit` (or `-e`) is a quickest way.
 
@@ -270,7 +270,7 @@ It shows
 with colors.
 
 When output is larger and whole output cannot be shown in screen at once, `list` does paging for the
-output using `less` command (if available). This behavior can be customized by `$NOTES_CLI_PAGER`.
+output using `less` command (if available). This behavior can be customized by `$NOTES_PAGER`.
 
 When there are many notes, it outputs many lines. In the case, a pager tool like `less` is useful
 You can also use `less` with pipe explicitly to see the output per page. `-A` global option is short
@@ -368,18 +368,18 @@ As described above, some behavior can be configurable with environment variables
 all environment variables affecting behavior of `notes`. Variables starting with `$NOTES_` are dedicated
 for `notes` command. Others are general environment variables affecting `notes` behavior.
 When you want to disable integration of Git, an editor or a pager, please set empty string to the
-corresponding environment variable like `export NOTES_CLI_PAGER=`.
+corresponding environment variable like `export NOTES_PAGER=`.
 
 | Name                | Default                                    | Description                                                                |
 |---------------------|--------------------------------------------|----------------------------------------------------------------------------|
-| `$NOTES_CLI_HOME`   | `notes` under [XDG data dir][xdg-dirs] | Home directory of `notes`. All notes are stored in sub directories         |
-| `$NOTES_CLI_EDITOR` | None                                       | Your favorite editor command. It can contain options like `"vim -g"`       |
-| `$NOTES_CLI_GIT`    | `"git"`                                    | Git command path. It is used for saving notes as Git repository            |
-| `$NOTES_CLI_PAGER`  | `"less -R -F -X"`                          | Pager command for paging long output from `notes list`                     |
-| `$XDG_DATA_HOME`    | None                                       | When `$NOTES_CLI_HOME` is not set, it is used for home                     |
+| `$NOTES_HOME`   | `notes` under [XDG data dir][xdg-dirs] | Home directory of `notes`. All notes are stored in sub directories         |
+| `$NOTES_EDITOR` | None                                       | Your favorite editor command. It can contain options like `"vim -g"`       |
+| `$NOTES_GIT`    | `"git"`                                    | Git command path. It is used for saving notes as Git repository            |
+| `$NOTES_PAGER`  | `"less -R -F -X"`                          | Pager command for paging long output from `notes list`                     |
+| `$XDG_DATA_HOME`    | None                                       | When `$NOTES_HOME` is not set, it is used for home                     |
 | `$APPLOCALDATA`     | None                                       | Even if `$XDG_DATA_HOME` is not set, it is used for home on Windows        |
-| `$EDITOR`           | None                                       | When `$NOTES_CLI_EDITOR` is not set, it is referred to pick editor command |
-| `$PAGER`            | None                                       | When `$NOTES_CLI_PAGER` is not set, it is referred to pick pager command   |
+| `$EDITOR`           | None                                       | When `$NOTES_EDITOR` is not set, it is referred to pick editor command |
+| `$PAGER`            | None                                       | When `$NOTES_PAGER` is not set, it is referred to pick pager command   |
 
 You can see the configurations by `notes config` command.
 
@@ -484,7 +484,7 @@ the interfaces.
 Please set it to environment variable.
 
 ```sh
-export NOTES_CLI_HOME=/path/to/dir
+export NOTES_HOME=/path/to/dir
 ```
 
 
