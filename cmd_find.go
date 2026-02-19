@@ -15,10 +15,8 @@ type FindCmd struct {
 	cli    *kingpin.CmdClause
 	out    io.Writer
 	Config *Config
-	// TitleQuery is a query string for searching note titles
-	TitleQuery string
-	// WithinQuery is an optional query string for searching metadata and body
-	WithinQuery string
+	// Query is a query string for searching notes
+	Query string
 	// Relative is a flag equivalent to --relative
 	Relative bool
 	// SortBy is a string indicating how to sort the list. This value is equivalent to --sort option
@@ -30,9 +28,8 @@ type FindCmd struct {
 }
 
 func (cmd *FindCmd) defineCLI(app *kingpin.Application) {
-	cmd.cli = app.Command("find", "Find notes by title and optionally by metadata/body text")
-	cmd.cli.Arg("title-query", "Query string to search in note titles").Required().StringVar(&cmd.TitleQuery)
-	cmd.cli.Arg("within-query", "Optional query string to search in note metadata and body").StringVar(&cmd.WithinQuery)
+	cmd.cli = app.Command("find", "Find notes by query in title, tags, metadata and body text")
+	cmd.cli.Arg("query", "Query string to search in notes").Required().StringVar(&cmd.Query)
 	cmd.cli.Flag("relative", "Show relative paths from $NOTES_HOME directory").Short('r').BoolVar(&cmd.Relative)
 	cmd.cli.Flag("sort", "Sort list by 'modified', 'created', 'filename' or 'category'. Default is 'created'").Short('s').EnumVar(&cmd.SortBy, "modified", "created", "filename", "category")
 	cmd.cli.Flag("edit", "Open listed notes with your favorite editor. $NOTES_EDITOR must be set. Paths of listed notes are passed to the editor command's arguments").Short('e').BoolVar(&cmd.Edit)
@@ -84,8 +81,7 @@ func (cmd *FindCmd) Do() error {
 		return err
 	}
 
-	titleQuery := strings.ToLower(strings.TrimSpace(cmd.TitleQuery))
-	withinQuery := strings.ToLower(strings.TrimSpace(cmd.WithinQuery))
+	query := strings.ToLower(strings.TrimSpace(cmd.Query))
 
 	numNotes := 0
 	for _, c := range cats {
@@ -99,17 +95,12 @@ func (cmd *FindCmd) Do() error {
 			if err != nil {
 				return err
 			}
-			if !strings.Contains(strings.ToLower(note.Title), titleQuery) {
-				continue
+			searchable, err := note.SearchableText()
+			if err != nil {
+				return err
 			}
-			if withinQuery != "" {
-				searchable, err := note.SearchableText()
-				if err != nil {
-					return err
-				}
-				if !strings.Contains(strings.ToLower(searchable), withinQuery) {
-					continue
-				}
+			if !findQueryMatch(searchable, query) {
+				continue
 			}
 			notes = append(notes, note)
 		}
@@ -139,4 +130,67 @@ func (cmd *FindCmd) Do() error {
 
 	pager.Wait()
 	return errors.Wrap(pager.Err, "Pager command did not run successfully")
+}
+
+func findQueryMatch(text, query string) bool {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return true
+	}
+
+	text = strings.ToLower(text)
+	if strings.Contains(text, query) {
+		return true
+	}
+
+	for _, token := range strings.Fields(query) {
+		if strings.Contains(text, token) {
+			continue
+		}
+		if !isFuzzyTokenMatch(token, text) {
+			return false
+		}
+	}
+	return true
+}
+
+func isFuzzyTokenMatch(token, text string) bool {
+	if len(token) < 3 {
+		return false
+	}
+
+	tokenRunes := []rune(token)
+	for _, word := range strings.Fields(text) {
+		wordRunes := []rune(word)
+		if len(wordRunes) < len(tokenRunes) || len(wordRunes)-len(tokenRunes) > 3 {
+			continue
+		}
+		if tokenRunes[0] != wordRunes[0] {
+			continue
+		}
+		if isSubsequence(token, word) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isSubsequence(needle, haystack string) bool {
+	if needle == "" {
+		return true
+	}
+
+	runes := []rune(needle)
+	i := 0
+	for _, r := range haystack {
+		if r != runes[i] {
+			continue
+		}
+		i++
+		if i == len(runes) {
+			return true
+		}
+	}
+	return false
 }

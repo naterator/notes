@@ -3,7 +3,7 @@
 local ret=1
 local commands; commands=(
 'new:Create a new note'
-'find:Find notes by title and optionally by metadata/body text'
+'find:Find notes by query in title, tags, metadata and body text'
 'list:List note paths with filtering by categories and/or tags with regular expressions (alias: ls)'
 'ls:List note paths with filtering by categories and/or tags with regular expressions (alias: ls)'
 'categories:List all categories (alias: cats)'

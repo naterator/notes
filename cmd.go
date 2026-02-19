@@ -21,7 +21,7 @@ type Cmd interface {
 }
 
 // Version is the version string of notes command. It conforms to semantic versioning
-var version = "1.0.1"
+var Version = "1.0.1"
 var description = `Simple note taking tool for command line with your favorite editor.
 
 You can manage (create/open/list/find) notes via this tool on terminal. notes also optionally can save your notes thanks to Git to avoid losing your notes.
@@ -35,7 +35,7 @@ func ParseCmd(args []string) (Cmd, error) {
 	noColor := cli.Flag("no-color", "Disable color output").Bool()
 	colorAlways := cli.Flag("color-always", "Enable color output always").Short('A').Bool()
 
-	cli.Version(version)
+	cli.Version(Version)
 	cli.Author("naterator <https://github.com/naterator>")
 	cli.HelpFlag.Short('h')
 

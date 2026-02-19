@@ -40,14 +40,12 @@ func TestFindCmd(t *testing.T) {
 
 	for _, tc := range []struct {
 		what      string
-		title     string
-		within    string
+		query     string
 		wantPaths []string
 	}{
 		{
-			what:   "title only with case-insensitive search",
-			title:  "THIS IS TITLE",
-			within: "",
+			what:  "title with case-insensitive search",
+			query: "THIS IS TITLE",
 			wantPaths: []string{
 				"c/3.md",
 				"b/2.md",
@@ -57,51 +55,58 @@ func TestFindCmd(t *testing.T) {
 			},
 		},
 		{
-			what:   "title and body",
-			title:  "title",
-			within: "gubergren",
+			what:  "body text search",
+			query: "gubergren",
 			wantPaths: []string{
+				"b/6.md",
 				"b/2.md",
 			},
 		},
 		{
-			what:   "title and body case-insensitive",
-			title:  "title",
-			within: "GUBERGREN",
+			what:  "body text search case-insensitive",
+			query: "GUBERGREN",
 			wantPaths: []string{
+				"b/6.md",
 				"b/2.md",
 			},
 		},
 		{
-			what:   "title and metadata tags",
-			title:  "title",
-			within: "A-BIT-LONG",
+			what:  "metadata tags search",
+			query: "A-BIT-LONG",
 			wantPaths: []string{
 				"c/5.md",
 			},
 		},
 		{
-			what:   "title and metadata created",
-			title:  "text from",
-			within: "2118-10-30",
+			what:  "metadata created search",
+			query: "2118-10-30",
 			wantPaths: []string{
 				"b/6.md",
 			},
 		},
 		{
+			what:  "fuzzy title search",
+			query: "ths ttl",
+			wantPaths: []string{
+				"c/3.md",
+				"b/2.md",
+				"c/5.md",
+				"a/1.md",
+				"a/4.md",
+			},
+		},
+		{
 			what:      "no match",
-			title:     "no-matching-title",
-			within:    "",
+			query:     "no-matching-query",
 			wantPaths: nil,
 		},
 	} {
 		t.Run(tc.what, func(t *testing.T) {
 			var buf bytes.Buffer
 			cmd := &FindCmd{
-				Config:      cfg,
-				Out:         &buf,
-				TitleQuery:  tc.title,
-				WithinQuery: tc.within,
+				Config: cfg,
+				Out:    &buf,
+				Query:  tc.query,
 			}
 
 			if err := cmd.Do(); err != nil {
@@ -126,10 +131,10 @@ func TestFindRelative(t *testing.T) {
 	cfg := testNewConfigForListCmd("normal")
 	var buf bytes.Buffer
 	cmd := &FindCmd{
-		Config:     cfg,
-		Out:        &buf,
-		TitleQuery: "this is title",
-		Relative:   true,
+		Config:   cfg,
+		Out:      &buf,
+		Query:    "this is title",
+		Relative: true,
 	}
 
 	if err := cmd.Do(); err != nil {
@@ -153,10 +158,10 @@ func TestFindSortByFilename(t *testing.T) {
 	cfg := testNewConfigForListCmd("normal")
 	var buf bytes.Buffer
 	cmd := &FindCmd{
-		Config:     cfg,
-		Out:        &buf,
-		TitleQuery: "this is title",
-		SortBy:     "filename",
+		Config: cfg,
+		Out:    &buf,
+		Query:  "this is title",
+		SortBy: "filename",
 	}
 
 	if err := cmd.Do(); err != nil {
@@ -190,10 +195,10 @@ func TestFindCmdEditOption(t *testing.T) {
 
 	var buf bytes.Buffer
 	cmd := &FindCmd{
-		Config:     cfg,
-		Out:        &buf,
-		TitleQuery: "this is title",
-		Edit:       true,
+		Config: cfg,
+		Out:    &buf,
+		Query:  "this is title",
+		Edit:   true,
 	}
 
 	if err := cmd.Do(); err != nil {
@@ -229,9 +234,9 @@ func TestFindCmdEditOption(t *testing.T) {
 func TestFindWriteError(t *testing.T) {
 	cfg := testNewConfigForListCmd("normal")
 	cmd := &FindCmd{
-		Config:     cfg,
-		Out:        alwaysErrorWriter{},
-		TitleQuery: "title",
+		Config: cfg,
+		Out:    alwaysErrorWriter{},
+		Query:  "title",
 	}
 	if err := cmd.Do(); err == nil || !strings.Contains(err.Error(), "Write error for test") {
 		t.Fatal("Unexpected error", err)
@@ -240,7 +245,7 @@ func TestFindWriteError(t *testing.T) {
 
 func TestFindNoHome(t *testing.T) {
 	cfg := &Config{HomePath: "/path/to/unknown/directory"}
-	err := (&FindCmd{Config: cfg, TitleQuery: "title"}).Do()
+	err := (&FindCmd{Config: cfg, Query: "title"}).Do()
 	if err == nil {
 		t.Fatal("Error did not occur")
 	}
@@ -252,8 +257,8 @@ func TestFindNoHome(t *testing.T) {
 func TestFindBrokenNote(t *testing.T) {
 	cfg := testNewConfigForListCmd("fail")
 	cmd := &FindCmd{
-		Config:     cfg,
-		TitleQuery: "title",
+		Config: cfg,
+		Query:  "title",
 	}
 	err := cmd.Do()
 	if err == nil {
@@ -274,9 +279,9 @@ func TestFindPagingWithPager(t *testing.T) {
 	cfg := testNewConfigForListCmd("normal")
 	cfg.PagerCmd = "cat"
 	cmd := &FindCmd{
-		Config:     cfg,
-		Out:        &buf,
-		TitleQuery: "title",
+		Config: cfg,
+		Out:    &buf,
+		Query:  "title",
 	}
 
 	if err := cmd.Do(); err != nil {
@@ -322,9 +327,9 @@ func TestFindPagingError(t *testing.T) {
 			}
 
 			cmd := &FindCmd{
-				Config:     cfg,
-				Out:        out,
-				TitleQuery: "title",
+				Config: cfg,
+				Out:    out,
+				Query:  "title",
 			}
 
 			if err := cmd.Do(); err == nil || !strings.Contains(err.Error(), tc.want) {

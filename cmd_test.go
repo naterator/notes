@@ -102,24 +102,16 @@ func TestParseArgs(t *testing.T) {
 		{
 			args: []string{"find", "title"},
 			want: &FindCmd{
-				TitleQuery: "title",
+				Query: "title",
 			},
 		},
 		{
-			args: []string{"find", "title", "body"},
+			args: []string{"find", "--sort", "filename", "--relative", "--edit", "title"},
 			want: &FindCmd{
-				TitleQuery:  "title",
-				WithinQuery: "body",
-			},
-		},
-		{
-			args: []string{"find", "--sort", "filename", "--relative", "--edit", "title", "body"},
-			want: &FindCmd{
-				TitleQuery:  "title",
-				WithinQuery: "body",
-				Relative:    true,
-				SortBy:      "filename",
-				Edit:        true,
+				Query:    "title",
+				Relative: true,
+				SortBy:   "filename",
+				Edit:     true,
 			},
 		},
 		{
