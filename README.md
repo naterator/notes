@@ -11,7 +11,9 @@
 - A three-pane TUI with visible focus, tag navigation, search, and Traditional or Vim-style editing.
 - Optional automatic Git sync, themes, and explicit self-updates.
 
-![Example CLI session and TUI editor](assets/demo.svg)
+![Recorded Notes session: creating and editing in the TUI, then CLI commands](assets/demo.gif)
+
+[Replayable terminal recording](assets/demo.cast) · [Recording script](scripts/record_demo.py)
 
 ## Install
 
