@@ -41,7 +41,11 @@ type Editor struct {
 
 func NewEditor(flavor, content string) Editor {
 	a := textarea.New()
-	a.ShowLineNumbers = true
+	a.ShowLineNumbers = false
+	// Store enforces the note-size limit; the display widget must not truncate
+	// a note at Bubbles' default 400 characters or 99 logical lines.
+	a.CharLimit = 0
+	a.MaxHeight = 0
 	a.Prompt = ""
 	a.SetWidth(60)
 	a.SetHeight(15)
@@ -151,6 +155,10 @@ func (e *Editor) render() {
 		e.Area.CursorDown()
 	}
 	e.Area.SetCursorColumn(targetCol)
+	// The widget refreshes viewport content lazily in View. Refresh it before
+	// repositioning so large pastes and resized soft wraps keep the cursor visible.
+	e.Area.View()
+	e.Area.SetHeight(e.Area.Height())
 }
 func (e *Editor) beginInsert() {
 	e.beginInsertFrom(e.snapshot())

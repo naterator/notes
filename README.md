@@ -8,7 +8,7 @@
 
 - Pipe-friendly commands for creating, finding, listing, editing, moving, and deleting notes.
 - Daily journals with Activities, Actions, and Notes sections.
-- A three-pane TUI with visible focus, tag navigation, search, and Traditional or Vim-style editing.
+- A borderless TUI with search at the top, a note editor on the left, and tags/notes on the right; Traditional or Vim-style editing.
 - Optional automatic Git sync, themes, and explicit self-updates.
 
 ![Recorded Notes session: creating and editing in the TUI, then CLI commands](assets/demo.gif)
@@ -80,6 +80,7 @@ notes find 'thought' --print0 | xargs -0 -n 1 cat
 ## Terminal editor
 
 - On first launch, Vim is preselected; choose Vim or Traditional (nano-like). The choice is saved as `tui.editor_mode`.
+- Shaded backgrounds separate the search and right-hand sidebar from the editor; focus and selection remain visible without color.
 - The search box starts focused when opening the TUI without a note; `notes tui NOTE` and TUI-backed `notes edit NOTE` start with the editor focused. `[FOCUS]`, a pane marker, and the footer show the current area and mode, including without color.
 - `Ctrl+G` shows action keys: `n` new, `j` journal, `t` tags, `f` find in note, `a` all-notes search, `b` tree, `e` editor, `s` save, `y` sync, `r` refresh, `c` settings, `q` quit, `h` help. `Ctrl+S` and `Ctrl+Q` also work where the terminal passes them through.
 - `Tab` cycles search → tree → editor. In editor text entry, Tab inserts a real tab; press `Esc` before using Tab to change focus. Shift+Tab cycles backward outside entry mode.

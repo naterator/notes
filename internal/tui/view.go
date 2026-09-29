@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -16,28 +17,66 @@ import (
 )
 
 func (m *Model) panel(title, body string, width, height int, focused bool) string {
-	p := m.palette()
-	label := "  " + title
-	if focused {
-		label = "> " + title + " [FOCUS]"
-	}
-	border := p.Border
-	if focused {
-		border = p.Accent
-	}
-	background := p.Base
-	if m.Overlay != "" {
-		background = p.Surface
-	}
-	style := m.textStyle(p.Text, background).Width(width).Height(height).Border(lipgloss.RoundedBorder())
-	if m.fixedColor() {
-		style = style.BorderForeground(lipgloss.Color(border)).BorderBackground(lipgloss.Color(background))
-	}
-	if !m.colored() {
-		body = ansi.Strip(body)
-	}
-	return style.Render(clipText(label, width-2) + "\n" + body)
+	background := m.panelBackground()
+	content := "\n" + m.paneTitle(title, width-4, focused, background) + "\n\n" + body
+	return m.paddedBlock(content, width, height, background)
 }
+
+func (m *Model) paneTitle(title string, width int, focused bool, background string) string {
+	style := m.textStyle(m.palette().Text, background)
+	if m.colored() {
+		style = style.Bold(true)
+	}
+	if focused {
+		label := clipText(title, width-lipgloss.Width(" [FOCUS]")) + " [FOCUS]"
+		if m.fixedColor() {
+			style = style.Foreground(lipgloss.Color(m.palette().Accent))
+		}
+		return style.Render(label)
+	}
+	return style.Render(clipText(title, width))
+}
+
+func (m *Model) block(content string, width, height int, background string) string {
+	if !m.colored() {
+		content = ansi.Strip(content)
+	} else if m.fixedColor() {
+		// Nested widgets reset SGR after their text. Restore this block's
+		// colors so subsequent spaces do not expose the terminal background.
+		base := ansi.Style{}.ForegroundColor(lipgloss.Color(m.palette().Text)).BackgroundColor(lipgloss.Color(background)).String()
+		content = strings.NewReplacer(ansi.ResetStyle, ansi.ResetStyle+base, "\x1b[0m", "\x1b[0m"+base).Replace(content)
+	}
+	lines := strings.Split(content, "\n")
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+	for i := range lines {
+		lines[i] = clipText(lines[i], width)
+	}
+	return m.textStyle(m.palette().Text, background).Width(width).Height(height).Render(strings.Join(lines, "\n"))
+}
+
+func (m *Model) paddedBlock(content string, width, height int, background string) string {
+	lines := strings.Split(content, "\n")
+	for i := range lines {
+		lines[i] = "  " + clipText(lines[i], width-4) + "  "
+	}
+	return m.block(strings.Join(lines, "\n"), width, height, background)
+}
+
+func inputView(input *textinput.Model, width int) string {
+	// The widget's width excludes its prompt and cursor cell.
+	width = max(1, width-lipgloss.Width(input.Prompt)-1)
+	if input.Width() != width {
+		pos := input.Position()
+		input.SetWidth(width)
+		// SetWidth alone leaves the widget's horizontal viewport unchanged.
+		input.CursorStart()
+		input.SetCursor(pos)
+	}
+	return input.View()
+}
+
 func clipText(value string, width int) string {
 	if lipgloss.Width(value) <= width {
 		return value
@@ -63,7 +102,7 @@ func (m *Model) treeView(height, width int) string {
 		line := prefix + r.Label
 		line = clipText(line, width)
 		if i == m.Selected {
-			line = m.selectedStyle().Render(line)
+			line = m.selectedStyle().Width(width).Render(line)
 		}
 		lines = append(lines, line)
 	}
@@ -119,6 +158,8 @@ func helpLines(m *Model) []string {
 	return lines
 }
 func (m *Model) overlayView() string {
+	width := max(40, min(m.Width-4, 90))
+	inner := width - 4
 	title, body := "", ""
 	switch m.Overlay {
 	case "settings":
@@ -144,26 +185,27 @@ func (m *Model) overlayView() string {
 			if i == m.Field {
 				prefix = "› "
 			}
-			body += prefix + f.Placeholder + ": " + f.View() + "\n"
+			label := prefix + f.Placeholder + ": "
+			body += label + inputView(&m.Fields[i], inner-lipgloss.Width(label)) + "\n"
 		}
 		body += "\nTab next field · Enter advance/create · Esc cancel"
 	case "tags":
 		title = "Edit tags"
-		body = "Tags: " + m.Prompt.View() + "\n\nSpace-separated tags · Enter apply · Esc cancel"
+		body = "Tags: " + inputView(&m.Prompt, inner-6) + "\n\nSpace-separated tags · Enter apply · Esc cancel"
 	case "confirm-tags":
 		title = "Confirm tag changes"
 		body = m.Message
 	case "find":
 		title = "Find in current note"
-		body = m.Prompt.View() + "\n\nEnter search · Esc cancel"
+		body = inputView(&m.Prompt, inner) + "\n\nEnter search · Esc cancel"
 	case "command":
 		title = "Command"
-		body = ":" + m.Prompt.View() + "\n\nnew journal tags find search tree editor w sync refresh q help settings config themes"
+		body = ":" + inputView(&m.Prompt, inner-1) + "\n\nnew journal tags find search tree editor w sync refresh q help settings config themes"
 	case "conflict":
 		title = "Note changed outside Notes"
 		body = m.Message + "\n\nr reload disk · c save a recovery draft outside Git · Esc keep editing"
 	}
-	return m.panel(title, body, max(40, min(m.Width-4, 90)), max(5, min(m.Height-5, strings.Count(body, "\n")+3)), true)
+	return m.panel(title, body, width, min(m.Height-4, strings.Count(body, "\n")+5), true)
 }
 func (m *Model) View() tea.View {
 	m.refreshStyles()
@@ -177,11 +219,14 @@ func (m *Model) View() tea.View {
 		v.AltScreen = true
 		return v
 	}
-	search := m.panel("Search all notes", m.Query.View(), m.Width-4, 2, m.Focus == "search")
-	leftW := max(20, m.Width/4)
-	rightW := max(30, m.Width-leftW-4)
-	left := m.panel("Tags / notes", m.treeView(m.Height-8, leftW), leftW, m.Height-8, m.Focus == "tree")
-	content := "Open a note from the tree"
+	l := layoutFor(m.Width, m.Height)
+	p := m.palette()
+	canvas, panel := m.canvasBackground(), m.panelBackground()
+	searchContent := "\n" + m.paneTitle("Search all notes", l.width-4, m.Focus == "search", panel) + "\n" + m.Query.View()
+	search := m.paddedBlock(searchContent, l.width, 4, panel)
+	sidebarContent := "\n" + m.paneTitle("Tags / notes", l.sidebarWidth-4, m.Focus == "tree", panel) + "\n\n" + m.treeView(l.bodyHeight-4, l.sidebarWidth-4)
+	sidebar := m.paddedBlock(sidebarContent, l.sidebarWidth, l.bodyHeight, panel)
+	content := m.textStyle(p.Muted, canvas).Render("Open a note from the sidebar\nCtrl+G n creates a new note")
 	title := "Note editor"
 	if m.Active != nil {
 		title = m.Active.ID
@@ -193,7 +238,8 @@ func (m *Model) View() tea.View {
 		}
 		content = m.Editor.Area.View()
 	}
-	right := m.panel(title, content, rightW, m.Height-8, m.Focus == "editor")
+	editorContent := "\n" + m.paneTitle(title, l.editorWidth-4, m.Focus == "editor", canvas) + "\n\n" + content
+	editor := m.paddedBlock(editorContent, l.editorWidth, l.bodyHeight, canvas)
 	status := m.modeLabel() + " · " + m.Message
 	if m.SyncRunning {
 		status += " · Syncing · editor read-only"
@@ -204,13 +250,15 @@ func (m *Model) View() tea.View {
 	} else if m.SyncPending || m.Dirty {
 		marker = m.palette().Warning
 	}
-	status = m.textStyle(marker, m.palette().Base).Render("●") + " " + status
+	status = m.textStyle(marker, canvas).Render("●") + " " + status
 	footerHint := "Ctrl+G n New · Ctrl+G c Settings · Ctrl+G h Help · Tab Focus"
 	if m.Leader {
-		status, footerHint = leaderHints(m.Width - 4)
+		status, footerHint = leaderHints(l.width - 4)
 	}
-	footer := m.textStyle(m.palette().Text, m.palette().Base).Width(m.Width - 4).Render(clipText(status, m.Width-4) + "\n" + clipText(footerHint, m.Width-4))
-	v := tea.NewView(m.finishView(lipgloss.JoinVertical(lipgloss.Left, search, lipgloss.JoinHorizontal(lipgloss.Top, left, right), footer)))
+	footer := m.paddedBlock(clipText(status, l.width-4)+"\n"+m.textStyle(p.Muted, canvas).Render(clipText(footerHint, l.width-4)), l.width, 2, canvas)
+	body := lipgloss.JoinHorizontal(lipgloss.Top, editor, m.block("", 2, l.bodyHeight, canvas), sidebar)
+	content = lipgloss.JoinVertical(lipgloss.Left, search, m.block("", l.width, 1, canvas), body, footer)
+	v := tea.NewView(m.paddedBlock("\n"+content+"\n", m.Width, m.Height, canvas))
 	v.AltScreen = true
 	return v
 }

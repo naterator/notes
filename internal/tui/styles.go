@@ -18,6 +18,25 @@ func (m *Model) schemeName() string {
 func (m *Model) palette() theme.Palette { return theme.Get(m.schemeName()) }
 func (m *Model) colored() bool          { return theme.Enabled(m.Config.Color, true) }
 func (m *Model) fixedColor() bool       { return m.colored() && m.schemeName() != "terminal" }
+
+// Dark palettes use their lighter surface for the editor canvas. Light
+// palettes keep their light base. Search/sidebar cards use the darker shade.
+func (m *Model) canvasBackground() string {
+	p := m.palette()
+	s, _ := theme.Lookup(m.schemeName())
+	if s.Kind == "light" {
+		return p.Base
+	}
+	return p.Surface
+}
+func (m *Model) panelBackground() string {
+	p := m.palette()
+	s, _ := theme.Lookup(m.schemeName())
+	if s.Kind == "light" {
+		return p.Surface
+	}
+	return p.Base
+}
 func (m *Model) textStyle(fg, bg string) lipgloss.Style {
 	s := lipgloss.NewStyle()
 	if m.fixedColor() {
@@ -51,21 +70,22 @@ func (m *Model) styleInput(input *textinput.Model, background string) {
 }
 func (m *Model) refreshStyles() {
 	p := m.palette()
-	m.styleInput(&m.Query, p.Base)
-	m.styleInput(&m.Prompt, p.Surface)
+	canvas, panel := m.canvasBackground(), m.panelBackground()
+	m.styleInput(&m.Query, panel)
+	m.styleInput(&m.Prompt, panel)
 	for i := range m.Fields {
-		m.styleInput(&m.Fields[i], p.Surface)
+		m.styleInput(&m.Fields[i], panel)
 	}
 	if m.Settings != nil {
-		m.styleInput(&m.Settings.Filter, p.Surface)
-		m.styleInput(&m.Settings.Input, p.Surface)
+		m.styleInput(&m.Settings.Filter, panel)
+		m.styleInput(&m.Settings.Input, panel)
 	}
 	if m.Editor == nil {
 		return
 	}
-	normal := m.textStyle(p.Text, p.Base)
-	muted := m.textStyle(p.Muted, p.Base)
-	focused := textarea.StyleState{Base: normal, Text: normal, CursorLine: normal, LineNumber: muted, CursorLineNumber: m.textStyle(p.Accent, p.Base), EndOfBuffer: muted, Placeholder: muted, Prompt: muted, Selection: m.selectedStyle()}
+	normal := m.textStyle(p.Text, canvas)
+	muted := m.textStyle(p.Muted, canvas)
+	focused := textarea.StyleState{Base: normal, Text: normal, CursorLine: normal, LineNumber: muted, CursorLineNumber: m.textStyle(p.Accent, canvas), EndOfBuffer: muted, Placeholder: muted, Prompt: muted, Selection: m.selectedStyle()}
 	blurred := focused
 	blurred.CursorLineNumber = muted
 	var cursor color.Color

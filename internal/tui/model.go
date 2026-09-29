@@ -336,7 +336,7 @@ func (m *Model) open(id string) error {
 	}
 	m.Active = &n
 	m.Editor = ptrEditor(NewEditor(m.Flavor, string(n.Content)))
-	m.Editor.SetSize(max(20, m.Width-m.Width/4-8), max(5, m.Height-7))
+	m.sizeEditor()
 	m.focus(m.Focus)
 	m.Saved = sha256.Sum256(n.Content)
 	m.Dirty = false

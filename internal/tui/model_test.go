@@ -11,7 +11,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/naterator/notes/internal/config"
 	"github.com/naterator/notes/internal/store"
 	"github.com/naterator/notes/internal/syncgit"
@@ -121,37 +120,7 @@ func TestFocusHelpAndLiteralEntry(t *testing.T) {
 		t.Fatalf("slash search scope: %q", m.Overlay)
 	}
 }
-func TestEditorRightBorderAlignsWithSearch(t *testing.T) {
-	m := modelFixture(t, "vim")
-	m.Config.Color = "never"
-	if err := m.open("question.md"); err != nil {
-		t.Fatal(err)
-	}
-	m.focus("editor")
-	for _, width := range []int{80, 100, 127} {
-		m.Update(tea.WindowSizeMsg{Width: width, Height: 30})
-		view := m.View().Content
-		borderColumn := func(label string) int {
-			t.Helper()
-			for _, line := range strings.Split(view, "\n") {
-				if !strings.Contains(line, label) {
-					continue
-				}
-				border := strings.LastIndex(line, "│")
-				if border >= 0 {
-					return lipgloss.Width(line[:border+len("│")])
-				}
-			}
-			t.Fatalf("missing %q border at width %d", label, width)
-			return 0
-		}
-		search := borderColumn("Search all notes")
-		editor := borderColumn("question.md [FOCUS]")
-		if editor != search {
-			t.Fatalf("width %d: search border at %d, editor border at %d", width, search, editor)
-		}
-	}
-}
+
 func TestSpecificNoteStartsInEditor(t *testing.T) {
 	for _, mode := range []string{"vim", "traditional", "ask"} {
 		t.Run(mode, func(t *testing.T) {

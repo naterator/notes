@@ -12,8 +12,8 @@ import (
 func (m *Model) settingsView() string {
 	s := m.Settings
 	width := max(40, min(m.Width-4, 92))
-	inner := width - 2
-	budget := m.Height - 7 // Title and borders leave space around the centered dialog.
+	inner := width - 4
+	budget := m.Height - 8 // Heading and padding leave space around the centered dialog.
 	title := "Settings"
 	lines := []string{"Config: " + m.Config.Path}
 	footer := "↑/↓ Select · Enter Edit · Tab Focus · Ctrl+R Reset · Ctrl+G h Help"
@@ -24,7 +24,7 @@ func (m *Model) settingsView() string {
 			title = "Setting changed outside Notes"
 			lines = append(lines, "Attempted: "+s.Attempted)
 		}
-		lines = append(lines, m.textStyle(m.palette().Error, m.palette().Surface).Render("!")+" "+s.Error, "r/Enter Reload · Esc Cancel · Ctrl+G h Help")
+		lines = append(lines, m.textStyle(m.palette().Error, m.panelBackground()).Render("!")+" "+s.Error, "r/Enter Reload · Esc Cancel · Ctrl+G h Help")
 	} else if s.View == "render" {
 		title = "Effective configuration"
 		content := m.effectiveLines()
@@ -40,10 +40,10 @@ func (m *Model) settingsView() string {
 			title = "Reset " + d.Label
 			lines = append(lines, "Remove the saved value of "+s.Key+"?", m.resetDetail())
 		} else {
-			lines = append(lines, "Value [FOCUS]: "+s.Input.View())
+			lines = append(lines, "Value [FOCUS]: "+inputView(&s.Input, inner-lipgloss.Width("Value [FOCUS]: ")))
 		}
 		if s.Error != "" {
-			lines = append(lines, m.textStyle(m.palette().Error, m.palette().Surface).Render("!")+" Error: "+s.Error)
+			lines = append(lines, m.textStyle(m.palette().Error, m.panelBackground()).Render("!")+" Error: "+s.Error)
 		}
 		if s.Saving {
 			lines = append(lines, "Saving…")
@@ -57,7 +57,7 @@ func (m *Model) settingsView() string {
 		if s.Focus != "filter" {
 			focus = "List [FOCUS] · Filter: "
 		}
-		lines = append(lines, focus+s.Filter.View())
+		lines = append(lines, focus+inputView(&s.Filter, inner-lipgloss.Width(focus)))
 		rows := s.rows()
 		row, selected := s.selected()
 		details := []string{"No matching settings", "Change or clear the filter"}
@@ -86,7 +86,7 @@ func (m *Model) settingsView() string {
 		display, currentLine, group := []string{}, 0, ""
 		for i, r := range rows {
 			if r.Group != "" && r.Group != group {
-				display = append(display, m.textStyle(m.palette().Accent, m.palette().Surface).Bold(true).Render(r.Group))
+				display = append(display, m.textStyle(m.palette().Accent, m.panelBackground()).Bold(true).Render(r.Group))
 				group = r.Group
 			}
 			mark := "  "
@@ -130,7 +130,7 @@ func (m *Model) settingsView() string {
 		if s.Saving {
 			lines = append(lines, "Saving…")
 		} else if s.Error != "" {
-			lines = append(lines, m.textStyle(m.palette().Error, m.palette().Surface).Render("!")+" Error: "+s.Error)
+			lines = append(lines, m.textStyle(m.palette().Error, m.panelBackground()).Render("!")+" Error: "+s.Error)
 		}
 		lines = append(lines, footer)
 	}
@@ -145,11 +145,11 @@ func (m *Model) settingsView() string {
 	if s.View == "home" || s.View == "error" || s.Direct {
 		hint = " · Esc close"
 	}
-	return m.panel(title+hint, strings.Join(lines, "\n"), width, min(m.Height-4, len(lines)+3), true)
+	return m.panel(title+hint, strings.Join(lines, "\n"), width, min(m.Height-4, len(lines)+4), true)
 }
 func (m *Model) themeSample() string {
 	p := m.palette()
-	bg := p.Surface
+	bg := m.panelBackground()
 	focus := m.textStyle(p.Accent, bg).Render("[FOCUS]")
 	selected := m.selectedStyle().Render("› Sample note")
 	markers := m.textStyle(p.Success, bg).Render("●") + " Saved  " + m.textStyle(p.Warning, bg).Render("●") + " Pending  " + m.textStyle(p.Error, bg).Render("●") + " Error"
@@ -158,7 +158,7 @@ func (m *Model) themeSample() string {
 
 func (m *Model) finishView(content string) string {
 	if m.fixedColor() {
-		return m.textStyle(m.palette().Text, m.palette().Base).Width(m.Width).Height(m.Height).Render(content)
+		return m.block(content, m.Width, m.Height, m.canvasBackground())
 	}
 	return content
 }

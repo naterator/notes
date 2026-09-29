@@ -22,11 +22,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.settingsSaved(v)
 	case tea.WindowSizeMsg:
 		m.Width, m.Height = v.Width, v.Height
-		m.Query.SetWidth(max(20, v.Width-8))
+		m.Query.SetWidth(layoutFor(v.Width, v.Height).width - 7)
 		m.Prompt.SetWidth(max(20, v.Width-12))
-		if m.Editor != nil {
-			m.Editor.SetSize(max(20, v.Width-v.Width/4-8), max(5, v.Height-7))
-		}
+		m.sizeEditor()
 		if m.Settings != nil {
 			m.Settings.Input.SetWidth(max(10, min(v.Width-12, 84)))
 			m.Settings.Filter.SetWidth(max(10, min(v.Width-26, 70)))
@@ -69,7 +67,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if n, e := m.Store.Read(m.Active.ID); e == nil && string(n.Content) != m.Editor.Value() {
 					m.Active = &n
 					m.Editor = ptrEditor(NewEditor(m.Flavor, string(n.Content)))
-					m.Editor.SetSize(max(20, m.Width-m.Width/4-8), max(5, m.Height-7))
+					m.sizeEditor()
 					m.focus(m.Focus)
 					m.Saved = sha256Sum(n.Content)
 				}
@@ -759,7 +757,8 @@ func (m *Model) applyTags() bool {
 		return false
 	}
 	m.Active = &n
-	m.Editor = editorAfterTagEdit(m.Editor, string(n.Content), max(20, m.Width-m.Width/4-8), max(5, m.Height-7))
+	w, h := layoutFor(m.Width, m.Height).editorSize()
+	m.Editor = editorAfterTagEdit(m.Editor, string(n.Content), w, h)
 	m.Saved = sha256Sum(n.Content)
 	m.Dirty = false
 	if e = m.refresh(); e != nil {
