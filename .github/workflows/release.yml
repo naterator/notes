@@ -1,0 +1,73 @@
+name: Release assets
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            goos: linux
+            goarch: amd64
+          - runner: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+          - runner: macos-15-intel
+            goos: darwin
+            goarch: amd64
+          - runner: macos-15
+            goos: darwin
+            goarch: arm64
+    runs-on: ${{ matrix.runner }}
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Validate tag and run native tests
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$(go env GOOS)" = "${{ matrix.goos }}"
+          test "$(go env GOARCH)" = "${{ matrix.goarch }}"
+          go vet ./...
+          go test -race ./...
+        shell: bash
+      - name: Build and smoke release binary
+        run: |
+          asset="notes-${{ matrix.goos }}-${{ matrix.goarch }}"
+          go build -trimpath -ldflags "-X github.com/naterator/notes/internal/cli.Version=$RELEASE_TAG -X github.com/naterator/notes/internal/cli.Commit=$GITHUB_SHA -X github.com/naterator/notes/internal/cli.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o "$asset" ./cmd/notes
+          python3 scripts/smoke_native.py "./$asset"
+        shell: bash
+      - uses: actions/upload-artifact@v6
+        with:
+          name: notes-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: notes-${{ matrix.goos }}-${{ matrix.goarch }}
+          if-no-files-found: error
+
+  upload:
+    needs: package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: notes-*
+          merge-multiple: true
+          path: dist
+      - name: Upload binaries to the user-created release
+        run: |
+          gh release upload "$RELEASE_TAG" dist/notes-* --repo "$GITHUB_REPOSITORY" --clobber
+        shell: bash

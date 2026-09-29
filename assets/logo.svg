@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">notes</title>
+  <desc id="desc">A folded note with a hash mark on a dark square.</desc>
+  <rect x="4" y="4" width="120" height="120" rx="27" fill="#1e1e2e" stroke="#45475a" stroke-width="4"/>
+  <rect x="27" y="27" width="64" height="76" rx="8" transform="rotate(-8 59 65)" fill="#585b70"/>
+  <path d="M42 20h44l17 17v64a9 9 0 0 1-9 9H42a9 9 0 0 1-9-9V29a9 9 0 0 1 9-9Z" fill="#f5e0dc" stroke="#cba6f7" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M86 20v13a4 4 0 0 0 4 4h13" fill="#fab387" stroke="#cba6f7" stroke-width="3" stroke-linejoin="round"/>
+  <path d="m59 47-7 42m24-42-7 42M45 61h38M42 77h38" transform="translate(6 -3)" fill="none" stroke="#45475a" stroke-width="6" stroke-linecap="round"/>
+</svg>
