@@ -57,7 +57,7 @@ Without an `origin` remote, notes stay local and automatic sync waits for one to
 
 - `notes new "Idea" --tag inbox` creates a note and prints its path. Add `--category work`, `--path work/idea.md`, `--template FILE`, or `--stdin` as needed.
 - `notes show NOTE` prints exact Markdown; `notes edit NOTE` opens the TUI unless an external editor is configured with `EDITOR`, `VISUAL`, or `notes config set editor '["vim"]'`.
-- `notes list` (`l`, `ls`) shows `base: REPO` and `/`-prefixed paths in a terminal. In a pipeline it prints absolute paths; `notes find QUERY` also prints paths. Use `--tag`, `--category`, `--sort`, `--limit`, `--relative`, `--print0`, `--json`, or `--long`; `find` also accepts `--regex` and `--matches`.
+- `notes list` (`l`, `ls`) shows `base: REPO/` and repository-relative paths without a leading slash in a terminal. Each entry can be used with `notes delete NOTE`. In a pipeline it prints absolute paths; `notes find QUERY` also prints paths. Use `--tag`, `--category`, `--sort`, `--limit`, `--relative`, `--print0`, `--json`, or `--long`; `find` also accepts `--regex` and `--matches`.
 - `notes tags`, `notes tags add NOTE TAG...`, and `notes tags remove NOTE TAG...` manage `#tags` in Markdown. Inline tags count; code, URLs, and escaped hashes do not.
 - `notes move NOTE DESTINATION` (`mv`), `notes delete NOTE --yes` (`rm`), and `notes categories` (`cats`) manage files and folders.
 - `notes journal` prints today's journal path. `notes journal add "Reviewed notes" --section actions --tag work` appends an entry; use `--date YYYY-MM-DD` for another day.

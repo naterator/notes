@@ -208,10 +208,8 @@ func (a *App) outputNotes(c config.Config, notes []store.Note, f queryFlags, mat
 		}
 		for _, n := range notes {
 			p := n.Path
-			if f.Relative {
+			if f.Relative || compactList {
 				p = n.ID
-			} else if compactList {
-				p = "/" + n.ID
 			}
 			if strings.ContainsAny(p, "\n\r\t") {
 				return usage("path contains newline/tab; use --print0 or --json")
@@ -219,16 +217,14 @@ func (a *App) outputNotes(c config.Config, notes []store.Note, f queryFlags, mat
 		}
 	}
 	if compactList {
-		if _, e := fmt.Fprintf(a.Out, "base: %s\n", c.Repo); e != nil {
+		if _, e := fmt.Fprintf(a.Out, "base: %s/\n", strings.TrimRight(c.Repo, "/")); e != nil {
 			return e
 		}
 	}
 	for _, n := range notes {
 		p := n.Path
-		if f.Relative {
+		if f.Relative || compactList {
 			p = n.ID
-		} else if compactList {
-			p = "/" + n.ID
 		}
 		if f.Matches {
 			count := 0

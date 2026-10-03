@@ -177,8 +177,15 @@ def main() -> int:
         if notes("list") != (str(path) + "\n").encode():
             raise RuntimeError("piped list output changed")
         listed = terminal_output([binary, "--config", str(config), "--repo", str(repo), "l"], env)
-        if listed != ("base: " + str(repo) + "\n/smoke.md\n").encode():
+        if listed != ("base: " + str(repo) + "/\nsmoke.md\n").encode():
             raise RuntimeError(f"interactive list output: {listed!r}")
+        delete_path = Path(notes("new", "Delete check", "--path", "work/a spaced note.md").decode().strip())
+        listed = terminal_output([binary, "--config", str(config), "--repo", str(repo), "list", "--category", "work"], env)
+        if listed != ("base: " + str(repo) + "/\nwork/a spaced note.md\n").encode():
+            raise RuntimeError(f"nested interactive list output: {listed!r}")
+        notes("delete", listed.splitlines()[1].decode(), "--yes")
+        if delete_path.exists():
+            raise RuntimeError("delete did not accept the displayed relative note path")
         notes("journal", "add", "Completed action", "--date", "2026-09-28", "--section", "actions")
         if b"[ ] Completed action" not in notes("show", "journal/2026/09/2026-09-28.md"):
             raise RuntimeError("journal entry was not saved")
