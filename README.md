@@ -4,12 +4,12 @@
 
 [![CI](https://github.com/naterator/notes/actions/workflows/ci.yml/badge.svg)](https://github.com/naterator/notes/actions/workflows/ci.yml) [![Latest release](https://img.shields.io/github/v/release/naterator/notes?label=release&color=cba6f7)](https://github.com/naterator/notes/releases/latest)
 
-`notes` is a Go CLI for Markdown notes, daily journals, tags, and a terminal editor. Notes stay as ordinary files in a Git repository.
+`notes` is a Go CLI and terminal editor for Markdown notes and daily journals. You can tag your notes, and they stay as ordinary files in a Git repository.
 
-- Pipe-friendly commands for creating, finding, listing, editing, moving, and deleting notes.
+- The CLI commands work in pipes. You can create, find, list, edit, move, and delete notes.
 - Daily journals with Activities, Actions, and Notes sections.
-- A borderless TUI with search at the top, a note editor on the left, and tags/notes on the right; Traditional or Vim-style editing.
-- Optional automatic Git sync, themes, and explicit self-updates.
+- The borderless TUI puts search up top, the editor on the left, and tags and notes on the right. Pick Traditional or Vim-style keys.
+- You can sync with Git automatically, pick a theme, and update the binary when you’re ready.
 
 ![Recorded Notes session: accepting repository setup, editing in the TUI, then using CLI commands](assets/demo.gif)
 
@@ -17,7 +17,7 @@
 
 ## Install
 
-Download the latest binary for macOS or Linux on amd64 or arm64:
+This downloads the latest binary for your Mac or Linux machine (amd64 or arm64).
 
 ```sh
 curl -fLo notes "https://github.com/naterator/notes/releases/latest/download/notes-$(uname -s | tr A-Z a-z)-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
@@ -27,7 +27,7 @@ sudo mv notes /usr/local/bin/
 
 ## Build from source
 
-Requires Go 1.27.1 or newer and Git:
+You’ll need Git and Go 1.27.1 or newer.
 
 ```sh
 git clone https://github.com/naterator/notes.git
@@ -41,9 +41,9 @@ sudo install -m 0755 notes /usr/local/bin/notes
 
 - Settings: `${XDG_CONFIG_HOME:-$HOME/.config}/notes/config.toml`.
 - Notes: `${XDG_CONFIG_HOME:-$HOME/.config}/notes/repo` by default; use `--repo`, `NOTES_REPO`, or `notes config set repo PATH` to change it.
-- Run `notes init` to initialize the configured directory as a Git repository. On first launch, `notes tui` asks before creating one. Press Enter to decline and exit. Existing Markdown stays in place, and read commands can inspect it before setup. If a command would write notes before setup, it prints the matching `notes init` command.
+- Run `notes init` to initialize the configured directory as a Git repository. If the directory doesn’t have a Git repository yet, `notes tui` asks before creating one. Just press Enter if you want to exit. If you already have Markdown in that directory, it stays where it is and you can read it before setup. If a command would write notes before setup, it prints the matching `notes init` command.
 
-Add your remote to enable syncing.
+If you want to sync your notes, add an origin remote.
 
 ```sh
 repo="${XDG_CONFIG_HOME:-$HOME/.config}/notes/repo"
@@ -66,14 +66,14 @@ notes find release --note "$note" --matches
 notes tui "$note"
 ```
 
-Tags use `/` for hierarchy, so `planning/release` appears under `planning` in the TUI tree and in `notes tags --tree`.
+Use `/` to nest tags. For example, `planning/release` appears under `planning` in the TUI tree and in `notes tags --tree`.
 
 ## Commands
 
 - `notes init` initializes the local Git repository and prints its path. It also accepts the global `--repo` and `--config` options.
 - `notes new "Idea" --tag inbox` creates a note and prints its path. Add `--category work`, `--path work/idea.md`, `--template FILE`, or `--stdin` as needed.
-- `notes show NOTE` prints exact Markdown. `notes edit NOTE` opens the TUI unless an external editor is configured. Use `notes edit NOTE --stdin < revised.md` to replace the entire note with exact Markdown from stdin.
-- `notes list` (`l`, `ls`) shows `base: REPO/` and repository-relative paths without a leading slash in a terminal. Each entry can be used with `notes delete NOTE`. In a pipeline it prints absolute paths; `notes find QUERY` also prints paths. Use `--tag` for exact tags, `--tag-prefix` for a tag and its descendants, or `--untagged`. Both commands also accept `--category`, `--sort`, `--limit`, `--relative`, `--print0`, `--json`, and `--long`. Use `notes find QUERY --note NOTE --matches` to show matching lines in one note, and `--regex` for a regular expression.
+- `notes show NOTE` prints exact Markdown. `notes edit NOTE` opens the TUI unless you’ve configured an external editor. Use `notes edit NOTE --stdin < revised.md` to replace the entire note with exact Markdown from stdin.
+- `notes list` (`l`, `ls`) shows `base: REPO/` and repository-relative paths without a leading slash in a terminal. Each entry can be used with `notes delete NOTE`. In a pipeline it prints absolute paths. `notes find QUERY` also prints paths. Use `--tag` for exact tags, `--tag-prefix` for a tag and its descendants, or `--untagged`. Both commands also accept `--category`, `--sort`, `--limit`, `--relative`, `--print0`, `--json`, and `--long`. Use `notes find QUERY --note NOTE --matches` to show matching lines in one note, and `--regex` for a regular expression.
 - `notes tags`, `notes tags add NOTE TAG...`, and `notes tags remove NOTE TAG...` manage `#tags` in Markdown. Use slash-separated tags such as `planning/release`; `notes tags --tree --counts` shows the sidebar’s tag counts, including ancestors. `notes tags set NOTE TAG...` replaces the tag set. Pass `--yes` to remove omitted tags, including inline tags. Code, URLs, and escaped hashes are ignored.
 - `notes move NOTE DESTINATION` (`mv`), `notes delete NOTE --yes` (`rm`), and `notes categories` (`cats`) manage files and folders.
 - `notes journal` prints today's journal path. `notes journal add "Reviewed notes" --section actions --tag work` appends an entry; use `--date YYYY-MM-DD` for another day.
@@ -91,15 +91,15 @@ notes show "$note"
 notes find 'thought' --print0 | xargs -0 -n 1 cat
 ```
 
-`new --stdin` and `journal add --stdin` read prose from stdin. A saved note whose automatic sync fails returns exit code 3; retry `notes sync` instead of repeating the write. Run `notes --help` or `notes COMMAND --help` for all flags.
+`new --stdin` and `journal add --stdin` read prose from stdin. If the note saves but automatic sync fails, the command exits with code 3. Retry `notes sync` instead of repeating the write. Run `notes --help` or `notes COMMAND --help` for all flags.
 
 ## Terminal editor
 
 - On first launch, Vim is preselected; choose Vim or Traditional (nano-like). The choice is saved as `tui.editor_mode`.
-- Shaded backgrounds separate the search and right-hand sidebar from the editor; focus and selection remain visible without color.
-- The search box starts focused when opening the TUI without a note; `notes tui NOTE` and TUI-backed `notes edit NOTE` start with the editor focused. `[FOCUS]`, a pane marker, and the footer show the current area and mode, including without color.
+- The search box and sidebar have their own background shades. You can still see where focus and selection are with color off.
+- Open the TUI without a note and focus starts in the search box. `notes tui NOTE` and TUI-backed `notes edit NOTE` start with the editor focused. `[FOCUS]`, a pane marker, and the footer show the current area and mode, including without color.
 - `Ctrl+G` shows action keys: `n` new, `j` journal, `t` tags, `f` find in note, `a` all-notes search, `b` tree, `e` editor, `s` save, `y` sync, `r` refresh, `c` settings, `q` quit, `h` help. `Ctrl+S` and `Ctrl+Q` also work where the terminal passes them through.
-- `Tab` cycles search → tree → editor. In editor text entry, Tab inserts a real tab; press `Esc` before using Tab to change focus. Shift+Tab cycles backward outside entry mode.
+- `Tab` cycles search → tree → editor. While you’re typing in the editor, Tab inserts a tab character. Press `Esc` before using Tab to change focus. Shift+Tab cycles backward outside entry mode.
 - `?` opens help in command/navigation mode and types `?` during text entry. `Ctrl+G h` always opens help. `/` in the all-notes search opens search within the current note; `Ctrl+V` then `/` inserts a literal slash in the all-notes query.
 - `:` in command mode opens built-in commands such as `:new`, `:tags`, `:find`, `:sync`, `:settings`/`:config`, `:themes`, `:w`, `:q`, and `:wq`. It is not a shell.
 - In Vim normal mode, `gg` and `G` jump to the first and last line and `42G` jumps to line 42. Use `h/j/k/l`, `w/b/e`, `0/^/$`, and `Ctrl+F/B/D/U` to move. Edit with `i/a/I/A/o/O`, `x`, `r`, `D/C/Y`, `dd/dw/d$`, `cc/cw/c$`, `yy/yw`, and `p/P`. Use `u` to undo, `Ctrl+R` to redo, `.` to repeat common edits, `v/V` to select, and `/` then `n/N` to search. Traditional mode supports arrows, selection, `Ctrl+A/E`, `Ctrl+K/U`, and `Ctrl+O`.
@@ -111,10 +111,10 @@ notes find 'thought' --print0 | xargs -0 -n 1 cat
 - `mocha` and `frappe` preserve the original Notes palettes. `history` also selects the previous Notes default, Mocha. Existing `catppuccin-mocha` and `catppuccin-frappe` settings still work. The previous Notes versions of `midnight`, `ocean`, `rose`, and `terminal` are available as `notes-midnight`, `notes-ocean`, `notes-rose`, and `terminal-native`.
 - Run `notes config themes` to list themes, `notes config set theme NAME` to save one, or `notes --theme NAME tui` to try it for one launch. Sync and autosave defaults are `git.auto_sync = true`, `git.max_interval = "5m"`, and `tui.autosave_delay = "1s"`.
 - Open interactive settings with `Ctrl+G c` or `:settings`. Search grouped settings, press Enter to edit/save one value, and use `Ctrl+R` to remove its saved preference. Esc cancels an edit or closes settings; `Ctrl+G h` shows help.
-- `:themes` previews schemes while browsing; Enter saves the choice and Esc restores the original appearance. Settings shows saved values and their effective source, including active environment/flag overrides.
+- `:themes` previews each theme as you browse. Press Enter to save it or Esc to go back to the theme you started with. Settings shows the saved values and where the active values come from, including environment variables and flags.
 - Repository changes apply on the next launch and do not move notes. Editor keys, colors, and future autosave/sync settings can change during the session; selecting editor mode `ask` restores the prompt on the next launch. Config edits use the same validation and TOML rewriting as `notes config set`, including its comment/formatting behavior.
 - Use `notes config render` for effective settings. Explicit flags override supported environment variables, which override TOML and defaults. `--theme`, `--color auto|always|never`, and `--no-color` control colors.
-- Git due checks run after note-changing CLI commands and on a timer while the TUI is open. A closed CLI cannot sync on a wall-clock deadline; schedule `notes sync` with your OS if needed.
+- Notes checks whether sync is due after CLI commands that change notes and on a timer while the TUI is open. If you want sync to run at a set time while Notes is closed, schedule `notes sync` with your OS if needed.
 - Sync stages Markdown changes only, fetches, commits when needed, pulls, then pushes. Conflicts and offline failures leave local changes intact and pending; resolve them with Git and rerun `notes sync`.
 
 ## Go API
@@ -136,5 +136,5 @@ return book.Save(ctx, note.ID, note.Revision(), body)
 ## Updates and license
 
 - `notes update --check` checks GitHub without changing the binary. `notes update` installs a newer release; a development build needs `--version X.Y.Z` (or `vX.Y.Z`) to install one explicitly.
-- Releases contain one binary per supported OS/architecture, named `notes-OS-ARCH`. The updater checks the SHA-256 digest in GitHub's asset metadata before replacing the installed binary; this detects corruption, not a compromised release account.
+- Releases contain one binary per supported OS/architecture, named `notes-OS-ARCH`. Before it replaces your binary, the updater checks the download against the SHA-256 digest in GitHub’s asset metadata. That catches a corrupt download. You still need to trust the release account.
 - Source is BSD 3-Clause licensed; see [LICENSE](LICENSE). Color palettes: [Catppuccin](https://catppuccin.com/palette/), [Nord](https://www.nordtheme.com/docs/colors-and-palettes/), [Gruvbox](https://github.com/morhetz/gruvbox), and [Solarized](https://ethanschoonover.com/solarized/).
