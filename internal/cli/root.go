@@ -47,6 +47,9 @@ func ExitCode(err error) int {
 	if errors.As(err, &ue) {
 		return 2
 	}
+	if errors.Is(err, syncgit.ErrNoRepo) {
+		return 1
+	}
 	s := err.Error()
 	if strings.Contains(s, "unknown flag") || strings.Contains(s, "requires ") || strings.Contains(s, "unknown command") {
 		return 2
@@ -66,7 +69,7 @@ func New(in io.Reader, out, errOut io.Writer) *App {
 	a := &App{In: in, Out: out, Err: errOut}
 	r := &cobra.Command{
 		Use: "notes", Short: "Manage Markdown notes", SilenceUsage: true, SilenceErrors: true,
-		Example: "  notes new \"Release checklist\" --tag planning\n  notes list --tag planning\n  notes find release --print0 | xargs -0 -n 1 cat\n  notes tui",
+		Example: "  notes init\n  notes new \"Release checklist\" --tag planning\n  notes list --tag planning\n  notes find release --print0 | xargs -0 -n 1 cat\n  notes tui",
 	}
 	r.SetIn(in)
 	r.SetOut(out)
@@ -84,6 +87,7 @@ func New(in io.Reader, out, errOut io.Writer) *App {
 		return []string{"auto", "always", "never"}, cobra.ShellCompDirectiveNoFileComp
 	})
 	a.Root = r
+	a.initCommand()
 	a.notesCommands()
 	a.configCommands()
 	a.syncCommands()
@@ -109,7 +113,7 @@ func addCommandShortcuts(root *cobra.Command) {
 	root.InitDefaultCompletionCmd()
 	minimum := map[string]int{
 		"categories": 1, "config": 2, "completion": 3,
-		"delete": 1, "edit": 1, "find": 1, "help": 1,
+		"delete": 1, "edit": 1, "find": 1, "help": 1, "init": 1,
 		"journal": 1, "list": 1, "move": 1, "new": 1,
 		"show": 1, "sync": 2, "tags": 2, "tui": 1,
 		"update": 1, "version": 1,
@@ -191,17 +195,41 @@ func (a *App) config() (config.Config, error) {
 	}
 	return c, nil
 }
-func (a *App) store(ctx context.Context) (config.Config, *store.Store, error) {
+func (a *App) store() (config.Config, *store.Store, error) {
 	c, e := a.config()
 	if e != nil {
 		return c, nil, e
 	}
-	s := store.New(c.Repo, c.StateDir)
-	if e := (syncgit.Client{Store: s}).EnsureRepo(ctx); e != nil {
-		return c, nil, e
+	return c, store.New(c.Repo, c.StateDir), nil
+}
+
+func (a *App) gitStore(ctx context.Context) (config.Config, *store.Store, error) {
+	c, s, err := a.store()
+	if err != nil {
+		return c, nil, err
+	}
+	err = (syncgit.Client{Store: s}).CheckRepo(ctx)
+	if errors.Is(err, syncgit.ErrNoRepo) {
+		command := "notes"
+		if a.ConfigFile != "" || os.Getenv("NOTES_CONFIG") != "" {
+			command += " --config " + shellWord(c.Path)
+		}
+		if a.Repo != "" || os.Getenv("NOTES_REPO") != "" {
+			command += " --repo " + shellWord(c.Repo)
+		}
+		return c, nil, fmt.Errorf("%w; run %s init first", err, command)
+	}
+	if err != nil {
+		return c, nil, err
 	}
 	return c, s, nil
 }
+
+// shellWord quotes paths for the example command printed to stderr.
+func shellWord(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
 func (a *App) maybeSync(ctx context.Context, c config.Config, s *store.Store, ids ...string) error {
 	if !c.Git.AutoSync {
 		return nil

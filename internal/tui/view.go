@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +16,7 @@ import (
 	"github.com/charmbracelet/x/term"
 	store "github.com/naterator/notes"
 	"github.com/naterator/notes/internal/config"
+	"github.com/naterator/notes/internal/syncgit"
 )
 
 func (m *Model) panel(title, body string, width, height int, focused bool) string {
@@ -264,11 +267,54 @@ func (m *Model) View() tea.View {
 	return v
 }
 
+// confirmRepository checks the notebook before Bubble Tea takes over the
+// terminal. A missing repository is an explicit setup choice. Existing
+// repositories, including malformed Git directories, are left to CheckRepo
+// to validate and are never silently replaced.
+func confirmRepository(ctx context.Context, s *store.Store, in io.Reader, out io.Writer) (bool, error) {
+	if s == nil {
+		return false, fmt.Errorf("notes repository is not configured")
+	}
+	client := syncgit.Client{Store: s}
+	if err := client.CheckRepo(ctx); err == nil {
+		return true, nil
+	} else if !errors.Is(err, syncgit.ErrNoRepo) {
+		return false, err
+	}
+	if _, err := fmt.Fprintf(out, "\nNo Git repository exists at %s.\nInitialize a Notes repository here? [y/N] ", s.Repo); err != nil {
+		return false, err
+	}
+	answer, err := bufio.NewReader(in).ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return false, err
+	}
+	if errors.Is(err, io.EOF) {
+		_, _ = fmt.Fprintln(out)
+		return false, nil
+	}
+	answer = strings.ToLower(strings.TrimSpace(answer))
+	if answer != "y" && answer != "yes" {
+		_, _ = fmt.Fprintln(out)
+		return false, nil
+	}
+	if err := client.EnsureRepo(ctx); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func Run(ctx context.Context, c config.Config, s *store.Store, start string, in io.Reader, out io.Writer) error {
 	input, inputOK := in.(*os.File)
 	output, outputOK := out.(*os.File)
 	if !inputOK || !outputOK || !term.IsTerminal(input.Fd()) || !term.IsTerminal(output.Fd()) {
 		return fmt.Errorf("notes tui requires an interactive terminal")
+	}
+	ready, err := confirmRepository(ctx, s, in, out)
+	if err != nil {
+		return fmt.Errorf("notes repository: %w", err)
+	}
+	if !ready {
+		return nil
 	}
 	m, e := NewModel(ctx, c, s, start)
 	if e != nil {

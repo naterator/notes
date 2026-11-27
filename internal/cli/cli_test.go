@@ -20,13 +20,20 @@ func run(t *testing.T, in string, args ...string) (string, error) {
 	return out.String(), e
 }
 
+func initTestRepo(t *testing.T, args []string) {
+	t.Helper()
+	if _, err := run(t, "", append(args, "init")...); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestTopLevelShortcuts(t *testing.T) {
 	a := New(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
 	for _, pair := range [][2]string{
 		{"c", "categories"}, {"ca", "categories"}, {"cat", "categories"}, {"cate", "categories"},
 		{"co", "config"}, {"con", "config"}, {"conf", "config"},
 		{"com", "completion"}, {"comp", "completion"}, {"compl", "completion"},
-		{"d", "delete"}, {"e", "edit"}, {"f", "find"}, {"h", "help"},
+		{"d", "delete"}, {"e", "edit"}, {"f", "find"}, {"h", "help"}, {"i", "init"},
 		{"j", "journal"}, {"l", "list"}, {"li", "list"}, {"lis", "list"},
 		{"m", "move"}, {"n", "new"}, {"s", "show"}, {"sh", "show"}, {"sho", "show"},
 		{"sy", "sync"}, {"syn", "sync"}, {"ta", "tags"}, {"tag", "tags"},
@@ -62,6 +69,7 @@ func TestTopLevelShortcuts(t *testing.T) {
 	base := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", filepath.Join(base, "state"))
 	args := []string{"--config", filepath.Join(base, "config.toml"), "--repo", filepath.Join(base, "repo")}
+	initTestRepo(t, args)
 	path, err := run(t, "", append(args, "n", "Shortcut")...)
 	if err != nil {
 		t.Fatal(err)
@@ -113,6 +121,7 @@ func TestEditFallsBackToTUIWithoutExternalEditor(t *testing.T) {
 	t.Setenv("VISUAL", "")
 	configPath := filepath.Join(base, "config.toml")
 	repo := filepath.Join(base, "repo")
+	initTestRepo(t, []string{"--config", configPath, "--repo", repo})
 	path, err := run(t, "", "--config", configPath, "--repo", repo, "j")
 	if err != nil {
 		t.Fatal(err)
@@ -132,6 +141,7 @@ func TestCLIFilePipeline(t *testing.T) {
 		t.Fatal(e)
 	}
 	args := []string{"--config", configPath, "--repo", repo}
+	initTestRepo(t, args)
 	newOut, e := run(t, "", append(args, "new", "Release checklist", "--category", "work", "--tag", "release")...)
 	if e != nil {
 		t.Fatal(e)
@@ -203,6 +213,7 @@ func TestPipedNotesCanExceedTUIEditorLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	args := []string{"--config", configPath, "--repo", repo}
+	initTestRepo(t, args)
 	large := strings.Repeat(strings.Repeat("a", 1023)+"\n", tuiLimit/1024+1)
 	noteBody := large + "unique-large-note-marker\n"
 	if out, err := run(t, noteBody, append(args, "new", "Large", "--path", "large.md", "--stdin")...); err != nil || strings.TrimSpace(out) != filepath.Join(repo, "large.md") {
@@ -222,30 +233,85 @@ func TestPipedNotesCanExceedTUIEditorLimit(t *testing.T) {
 		t.Fatalf("large journal changed: length %d, %v", len(out), err)
 	}
 }
-func TestFirstUseInitializesLocalRepo(t *testing.T) {
+func TestDefaultRepoSetupHint(t *testing.T) {
 	base := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(base, "config"))
 	t.Setenv("XDG_STATE_HOME", filepath.Join(base, "state"))
-	repo := filepath.Join(base, "repo")
-	out, e := run(t, "", "--config", filepath.Join(base, "missing.toml"), "--repo", repo, "new", "Offline note")
-	if e != nil {
-		t.Fatalf("initial local note failed: %v", e)
+	t.Setenv("NOTES_CONFIG", "")
+	t.Setenv("NOTES_REPO", "")
+	if err := os.Unsetenv("NOTES_REPO"); err != nil {
+		t.Fatal(err)
 	}
-	if _, e = os.Stat(strings.TrimSpace(out)); e != nil {
-		t.Fatalf("note lost: %v", e)
-	}
-	if _, e = os.Stat(filepath.Join(repo, ".git")); e != nil {
-		t.Fatalf("notes data repo was not initialized: %v", e)
-	}
-	if _, e = run(t, "", "--config", filepath.Join(base, "missing.toml"), "--repo", repo, "sync"); e == nil || !strings.Contains(e.Error(), "origin remote is required") {
-		t.Fatalf("manual sync without origin: %v", e)
+	out, err := run(t, "", "new", "Idea")
+	if out != "" || ExitCode(err) != 1 || !strings.Contains(err.Error(), "run notes init first") {
+		t.Fatalf("missing default repo: stdout %q, error %v", out, err)
 	}
 }
+
+func TestCommandsRequireExplicitRepoSetup(t *testing.T) {
+	base := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", filepath.Join(base, "state"))
+	repo := filepath.Join(base, "my notes")
+	configPath := filepath.Join(base, "missing.toml")
+	args := []string{"--config", configPath, "--repo", repo}
+	wantCommand := "run notes --config '" + configPath + "' --repo '" + repo + "' init first"
+	for _, command := range [][]string{
+		{"new", "Idea"}, {"edit", "idea.md", "--stdin"},
+		{"move", "idea.md", "archive.md"}, {"delete", "idea.md", "--yes"},
+		{"tags", "add", "idea.md", "tag"}, {"tags", "remove", "idea.md", "tag"}, {"tags", "set", "idea.md"},
+		{"journal"}, {"journal", "add", "entry"}, {"sync"}, {"sync", "status"},
+	} {
+		out, err := run(t, "", append(args, command...)...)
+		if out != "" || ExitCode(err) != 1 || !strings.Contains(err.Error(), wantCommand) {
+			t.Fatalf("%v: expected setup instructions on failure, got stdout %q, error %v", command, out, err)
+		}
+	}
+	if out, err := run(t, "", append(args, "list", "--json")...); err != nil || out != "[]\n" {
+		t.Fatalf("list without a repository: %q, %v", out, err)
+	}
+	if _, err := os.Stat(repo); !os.IsNotExist(err) {
+		t.Fatalf("commands touched the missing notes directory: %v", err)
+	}
+
+	if err := os.Mkdir(repo, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(repo, "existing.md")
+	if err := os.WriteFile(path, []byte("# Original\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := run(t, "", append(args, "show", "existing.md")...); err != nil || out != "# Original\n" {
+		t.Fatalf("existing Markdown should remain readable: %q, %v", out, err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".git")); !os.IsNotExist(err) {
+		t.Fatalf("show initialized Git: %v", err)
+	}
+	for range 2 {
+		if out, err := run(t, "", append(args, "init")...); err != nil || out != repo+"\n" {
+			t.Fatalf("explicit init failed: %q, %v", out, err)
+		}
+	}
+	if out, err := run(t, "", append(args, "show", "existing.md")...); err != nil || out != "# Original\n" {
+		t.Fatalf("init changed existing Markdown: %q, %v", out, err)
+	}
+	out, err := run(t, "", append(args, "new", "Offline note")...)
+	if err != nil {
+		t.Fatalf("note creation after init failed: %v", err)
+	}
+	if _, err := os.Stat(strings.TrimSpace(out)); err != nil {
+		t.Fatalf("note lost: %v", err)
+	}
+	if _, err := run(t, "", append(args, "sync")...); err == nil || !strings.Contains(err.Error(), "origin remote is required") {
+		t.Fatalf("manual sync without origin: %v", err)
+	}
+}
+
 func TestNoOpTagEditDoesNotAttemptGit(t *testing.T) {
 	base := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", filepath.Join(base, "state"))
 	configPath := filepath.Join(base, "config.toml")
 	repo := filepath.Join(base, "repo")
-	// Creation saves the note locally and initializes the repo without a remote.
+	initTestRepo(t, []string{"--config", configPath, "--repo", repo})
 	path, err := run(t, "", "--config", configPath, "--repo", repo, "new", "Tagged", "--tag", "work")
 	if err != nil {
 		t.Fatalf("local creation: %v", err)
@@ -293,6 +359,7 @@ func TestNewlineNamedExistingNotesRequireSafeOutput(t *testing.T) {
 	if out, err := run(t, "", append(args, "categories")...); ExitCode(err) != 2 || out != "" {
 		t.Fatalf("categories emitted ambiguous partial output: %q, %v", out, err)
 	}
+	initTestRepo(t, args)
 	if out, err := run(t, "", append(args, "new", "bad", "--path", "bad\nname.md")...); err == nil || out != "" {
 		t.Fatalf("created ambiguous path: %q, %v", out, err)
 	}
@@ -311,6 +378,7 @@ func TestCharacterDeviceIsNotAnInteractiveTerminal(t *testing.T) {
 	if _, err := run(t, "", "--config", configPath, "config", "set", "git.auto_sync", "false"); err != nil {
 		t.Fatal(err)
 	}
+	initTestRepo(t, []string{"--config", configPath, "--repo", repo})
 	path, err := run(t, "", "--config", configPath, "--repo", repo, "new", "Keep", "--path", "keep.md")
 	if err != nil {
 		t.Fatal(err)
@@ -353,6 +421,7 @@ func TestFailedExternalEditorLeavesItsChanges(t *testing.T) {
 	if _, err := run(t, "", "--config", configPath, "config", "set", "editor", string(args)); err != nil {
 		t.Fatal(err)
 	}
+	initTestRepo(t, []string{"--config", configPath, "--repo", repo})
 	if _, err := run(t, "", "--config", configPath, "--repo", repo, "new", "Test", "--path", "test.md"); err != nil {
 		t.Fatal(err)
 	}

@@ -37,7 +37,7 @@ func (a *App) newCommand() {
 	var tags []string
 	var fromStdin bool
 	cmd := &cobra.Command{Use: "new TITLE", Short: "Create one Markdown note", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		c, s, e := a.store(cmd.Context())
+		c, s, e := a.gitStore(cmd.Context())
 		if e != nil {
 			return e
 		}
@@ -69,7 +69,7 @@ func (a *App) newCommand() {
 }
 func (a *App) showCommand() {
 	a.Root.AddCommand(&cobra.Command{Use: "show NOTE", Short: "Print exact Markdown source", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		_, s, e := a.store(cmd.Context())
+		_, s, e := a.store()
 		if e != nil {
 			return e
 		}
@@ -232,7 +232,7 @@ func (a *App) listCommand(find bool) {
 				return usage("invalid regex: %v", e)
 			}
 		}
-		c, s, e := a.store(cmd.Context())
+		c, s, e := a.store()
 		if e != nil {
 			return e
 		}
@@ -269,7 +269,7 @@ func (a *App) tagsCommand() {
 		if len(args) > 0 {
 			return unknownSubcommand(cmd, args)
 		}
-		_, s, e := a.store(cmd.Context())
+		_, s, e := a.store()
 		if e != nil {
 			return e
 		}
@@ -327,7 +327,7 @@ func (a *App) tagsCommand() {
 			name = "remove"
 		}
 		child := &cobra.Command{Use: name + " NOTE TAG...", Args: cobra.MinimumNArgs(2), RunE: func(cmd *cobra.Command, args []string) error {
-			c, s, e := a.store(cmd.Context())
+			c, s, e := a.gitStore(cmd.Context())
 			if e != nil {
 				return e
 			}
@@ -344,7 +344,7 @@ func (a *App) tagsCommand() {
 	}
 	var yes bool
 	set := &cobra.Command{Use: "set NOTE [TAG...]", Short: "Replace all tags on one note", Args: cobra.MinimumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		c, s, err := a.store(cmd.Context())
+		c, s, err := a.gitStore(cmd.Context())
 		if err != nil {
 			return err
 		}
@@ -374,7 +374,7 @@ func (a *App) tagsCommand() {
 func (a *App) editCommand() {
 	var fromStdin bool
 	cmd := &cobra.Command{Use: "edit NOTE", Args: cobra.ExactArgs(1), Short: "Open a note in an editor or replace it from stdin", RunE: func(cmd *cobra.Command, args []string) error {
-		c, s, e := a.store(cmd.Context())
+		c, s, e := a.gitStore(cmd.Context())
 		if e != nil {
 			return e
 		}
@@ -418,7 +418,7 @@ func (a *App) editCommand() {
 func (a *App) deleteCommand() {
 	var yes bool
 	cmd := &cobra.Command{Use: "delete NOTE", Aliases: []string{"rm"}, Args: cobra.ExactArgs(1), Short: "Delete one note", RunE: func(cmd *cobra.Command, args []string) error {
-		c, s, e := a.store(cmd.Context())
+		c, s, e := a.gitStore(cmd.Context())
 		if e != nil {
 			return e
 		}
@@ -451,7 +451,7 @@ func (a *App) deleteCommand() {
 }
 func (a *App) moveCommand() {
 	a.Root.AddCommand(&cobra.Command{Use: "move NOTE DESTINATION", Aliases: []string{"mv"}, Args: cobra.ExactArgs(2), Short: "Move a note", RunE: func(cmd *cobra.Command, args []string) error {
-		c, s, e := a.store(cmd.Context())
+		c, s, e := a.gitStore(cmd.Context())
 		if e != nil {
 			return e
 		}
@@ -467,7 +467,7 @@ func (a *App) moveCommand() {
 }
 func (a *App) categoriesCommand() {
 	a.Root.AddCommand(&cobra.Command{Use: "categories", Aliases: []string{"cats"}, Short: "List note-containing categories", RunE: func(cmd *cobra.Command, args []string) error {
-		_, s, e := a.store(cmd.Context())
+		_, s, e := a.store()
 		if e != nil {
 			return e
 		}
@@ -505,7 +505,7 @@ func (a *App) journalCommand() {
 		if len(args) > 0 {
 			return unknownSubcommand(cmd, args)
 		}
-		c, s, e := a.store(cmd.Context())
+		c, s, e := a.gitStore(cmd.Context())
 		if e != nil {
 			return e
 		}
@@ -532,21 +532,22 @@ func (a *App) journalCommand() {
 		if len(args) > 1 || fromStdin && len(args) > 0 {
 			return usage("journal add accepts TEXT or --stdin")
 		}
-		body := ""
-		if fromStdin {
-			b, e := io.ReadAll(a.In)
-			if e != nil {
-				return e
-			}
-			body = string(b)
-		} else if len(args) == 1 {
-			body = args[0]
-		} else {
+		if !fromStdin && len(args) == 0 {
 			return usage("journal add requires TEXT or --stdin")
 		}
-		c, s, e := a.store(cmd.Context())
+		c, s, e := a.gitStore(cmd.Context())
 		if e != nil {
 			return e
+		}
+		var body string
+		if fromStdin {
+			b, err := io.ReadAll(a.In)
+			if err != nil {
+				return err
+			}
+			body = string(b)
+		} else {
+			body = args[0]
 		}
 		n, e := s.AddJournal(cmd.Context(), date, c.Journal.Timezone, section, body, tags, time.Now())
 		if e != nil {

@@ -141,6 +141,23 @@ func (a *App) configCommands() {
 	}
 	a.Root.AddCommand(cmd)
 }
+func (a *App) initCommand() {
+	a.Root.AddCommand(&cobra.Command{
+		Use: "init", Short: "Initialize the local Notes Git repository", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, s, err := a.store()
+			if err != nil {
+				return err
+			}
+			if err := (syncgit.Client{Store: s}).EnsureRepo(cmd.Context()); err != nil {
+				return err
+			}
+			_, err = fmt.Fprintln(a.Out, s.Repo)
+			return err
+		},
+	})
+}
+
 func (a *App) syncCommands() {
 	var message string
 	var statusJSON bool
@@ -148,7 +165,7 @@ func (a *App) syncCommands() {
 		if len(args) != 0 {
 			return unknownSubcommand(cmd, args)
 		}
-		c, s, e := a.store(cmd.Context())
+		c, s, e := a.gitStore(cmd.Context())
 		if e != nil {
 			return e
 		}
@@ -157,7 +174,7 @@ func (a *App) syncCommands() {
 	}}
 	cmd.Flags().StringVarP(&message, "message", "m", "", "commit message")
 	status := &cobra.Command{Use: "status", Short: "Show local Git sync state", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
-		c, s, e := a.store(cmd.Context())
+		c, s, e := a.gitStore(cmd.Context())
 		if e != nil {
 			return e
 		}
@@ -178,7 +195,7 @@ func (a *App) syncCommands() {
 }
 func (a *App) miscCommands() {
 	a.Root.AddCommand(&cobra.Command{Use: "tui [NOTE]", Short: "Open interactive notes", Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		c, s, e := a.store(cmd.Context())
+		c, s, e := a.store()
 		if e != nil {
 			return e
 		}

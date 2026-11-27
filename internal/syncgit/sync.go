@@ -31,25 +31,118 @@ type Status struct {
 	LastCommit string   `json:"last_commit,omitempty"`
 }
 
-var ErrConflict = errors.New("Git conflict requires manual resolution")
+var (
+	ErrConflict = errors.New("Git conflict requires manual resolution")
+	// ErrNoRepo means the configured Notes directory does not have its own
+	// local Git repository. It deliberately does not classify an invalid
+	// existing .git marker as missing.
+	ErrNoRepo = errors.New("notes repository is not initialized")
+)
 
-// EnsureRepo initializes the dedicated notes repository on first use.
+func repoPath(s *store.Store) (string, error) {
+	if s == nil {
+		return "", errors.New("notes store is nil")
+	}
+	path, err := filepath.Abs(s.Repo)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Clean(path), nil
+}
+
+func samePath(a, b string) bool {
+	a = filepath.Clean(a)
+	b = filepath.Clean(b)
+	if resolved, err := filepath.EvalSymlinks(a); err == nil {
+		a = resolved
+	}
+	if resolved, err := filepath.EvalSymlinks(b); err == nil {
+		b = resolved
+	}
+	return a == b
+}
+
+// CheckRepo validates only the configured directory's local Git repository.
+// It never creates files and never contacts a remote. A parent checkout does
+// not satisfy this check because Notes owns a separate repository directory.
+func (g Client) CheckRepo(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	repo, err := repoPath(g.Store)
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(repo)
+	if errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("%w: %s", ErrNoRepo, repo)
+	}
+	if err != nil {
+		return fmt.Errorf("inspect notes repository %s: %w", repo, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("notes repository path is not a directory: %s", repo)
+	}
+	marker, err := os.Lstat(filepath.Join(repo, ".git"))
+	if errors.Is(err, os.ErrNotExist) {
+		// A bare repository has no .git marker. Detect it explicitly so it
+		// cannot be mistaken for a fresh notebook directory.
+		if bare, bareErr := g.run(ctx, false, "rev-parse", "--is-bare-repository"); bareErr == nil && strings.TrimSpace(bare) == "true" {
+			return fmt.Errorf("configured notes repository is a bare Git repository: %s", repo)
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return fmt.Errorf("%w: %s", ErrNoRepo, repo)
+	}
+	if err != nil {
+		return fmt.Errorf("inspect Git metadata %s: %w", filepath.Join(repo, ".git"), err)
+	}
+	if marker.Mode()&os.ModeSymlink == 0 && !marker.IsDir() && !marker.Mode().IsRegular() {
+		return fmt.Errorf("invalid Git metadata marker: %s", filepath.Join(repo, ".git"))
+	}
+	root, err := g.run(ctx, false, "rev-parse", "--show-toplevel")
+	if err != nil {
+		if bare, bareErr := g.run(ctx, false, "rev-parse", "--is-bare-repository"); bareErr == nil && strings.TrimSpace(bare) == "true" {
+			return fmt.Errorf("configured notes repository is a bare Git repository: %s", repo)
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return fmt.Errorf("invalid Git metadata in notes repository %s: %w", repo, err)
+	}
+	root = strings.TrimSuffix(root, "\n")
+	if !samePath(repo, root) {
+		return fmt.Errorf("Git root %s differs from configured notes repo %s", root, repo)
+	}
+	return nil
+}
+
+// EnsureRepo initializes the configured Notes repository after explicit setup.
+// A valid existing repository is left in place.
 func (g Client) EnsureRepo(ctx context.Context) error {
+	repo, err := repoPath(g.Store)
+	if err != nil {
+		return err
+	}
 	release, err := g.Store.Lock(ctx)
 	if err != nil {
 		return err
 	}
 	defer release()
-	if err := os.MkdirAll(g.Store.Repo, 0700); err != nil {
+	if err := g.CheckRepo(ctx); err == nil {
+		return nil
+	} else if !errors.Is(err, ErrNoRepo) {
 		return err
 	}
-	if _, err := os.Lstat(filepath.Join(g.Store.Repo, ".git")); err == nil {
-		return nil
-	} else if !errors.Is(err, os.ErrNotExist) {
+	if err := os.MkdirAll(repo, 0700); err != nil {
 		return err
 	}
 	_, err = g.run(ctx, false, "init", "-b", "main")
-	return err
+	if err != nil {
+		return err
+	}
+	return g.CheckRepo(ctx)
 }
 
 func (g Client) HasOrigin(ctx context.Context) (bool, error) {
@@ -97,26 +190,8 @@ func (g Client) run(ctx context.Context, background bool, args ...string) (strin
 	return string(b), nil
 }
 func (g Client) preflight(ctx context.Context) (string, error) {
-	root, err := g.run(ctx, false, "rev-parse", "--show-toplevel")
-	if err != nil {
-		return "", fmt.Errorf("notes repository is not a Git working tree: %w", err)
-	}
-	a, e := filepath.Abs(strings.TrimSpace(root))
-	if e != nil {
-		return "", e
-	}
-	b, e := filepath.Abs(g.Store.Repo)
-	if e != nil {
-		return "", e
-	}
-	if resolved, err := filepath.EvalSymlinks(a); err == nil {
-		a = resolved
-	}
-	if resolved, err := filepath.EvalSymlinks(b); err == nil {
-		b = resolved
-	}
-	if a != b {
-		return "", fmt.Errorf("Git root %s differs from configured notes repo %s", a, b)
+	if err := g.CheckRepo(ctx); err != nil {
+		return "", err
 	}
 	branch, err := g.run(ctx, false, "symbolic-ref", "--quiet", "--short", "HEAD")
 	if err != nil {

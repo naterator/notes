@@ -143,8 +143,8 @@ func TestSyncRequiresDedicatedRepoOriginAndIdentity(t *testing.T) {
 	if _, err := c.Store.Create(t.Context(), store.NewOptions{Title: "first", Path: "first.md"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.Sync(context.Background(), "", false); err == nil || !strings.Contains(err.Error(), "differs from configured notes repo") {
-		t.Fatalf("enclosing Git checkout was accepted: %v", err)
+	if err := c.Sync(t.Context(), "", false); !errors.Is(err, ErrNoRepo) {
+		t.Fatalf("expected missing repository error for an enclosing Git checkout: %v", err)
 	}
 	git(t, "init", "-b", "main", repo)
 	if err := c.Sync(context.Background(), "", false); err == nil || !strings.Contains(err.Error(), "origin remote is required") {

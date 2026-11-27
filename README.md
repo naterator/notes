@@ -41,20 +41,21 @@ sudo install -m 0755 notes /usr/local/bin/notes
 
 - Settings: `${XDG_CONFIG_HOME:-$HOME/.config}/notes/config.toml`.
 - Notes: `${XDG_CONFIG_HOME:-$HOME/.config}/notes/repo` by default; use `--repo`, `NOTES_REPO`, or `notes config set repo PATH` to change it.
-- Notes initializes that directory as its own Git repository on first use. Add your remote to enable syncing:
+- Run `notes init` to initialize the configured directory as a Git repository, or confirm the setup prompt when you open `notes tui`. Existing Markdown stays in place. CLI commands that write notes print setup instructions if the repository is missing. Read commands can still inspect loose Markdown.
+
+Add your remote to enable syncing.
 
 ```sh
 repo="${XDG_CONFIG_HOME:-$HOME/.config}/notes/repo"
-notes --repo "$repo" list >/dev/null
+notes --repo "$repo" init
 git -C "$repo" remote add origin YOUR_REMOTE_URL
 ```
 
-Git also needs `user.name` and `user.email`. For a local-only notebook, run `notes config set git.auto_sync false`.
-
-Without an `origin` remote, notes stay local and automatic sync waits for one to be added.
+Git sync needs `user.name`, `user.email`, and a reachable `origin` remote. A local Git repository without an origin supports normal editing. You can turn off automatic sync with `notes config set git.auto_sync false`.
 
 ## Commands
 
+- `notes init` initializes the local Git repository and prints its path. It also accepts the global `--repo` and `--config` options.
 - `notes new "Idea" --tag inbox` creates a note and prints its path. Add `--category work`, `--path work/idea.md`, `--template FILE`, or `--stdin` as needed.
 - `notes show NOTE` prints exact Markdown. `notes edit NOTE` opens the TUI unless an external editor is configured. Use `notes edit NOTE --stdin < revised.md` to replace the entire note with exact Markdown from stdin.
 - `notes list` (`l`, `ls`) shows `base: REPO/` and repository-relative paths without a leading slash in a terminal. Each entry can be used with `notes delete NOTE`. In a pipeline it prints absolute paths; `notes find QUERY` also prints paths. Use `--tag` for exact tags, `--tag-prefix` for a tag and its descendants, or `--untagged`. Both commands also accept `--category`, `--sort`, `--limit`, `--relative`, `--print0`, `--json`, and `--long`. Use `notes find QUERY --note NOTE --matches` to show matching lines in one note, and `--regex` for a regular expression.
@@ -64,7 +65,7 @@ Without an `origin` remote, notes stay local and automatic sync waits for one to
 - `notes sync` (`save`) commits note changes, pulls from `origin`, and pushes. `notes sync status --json` inspects local state without network access.
 - `notes config render`, `get KEY`, `set KEY VALUE`, `unset KEY`, `path`, and `edit` manage TOML settings.
 - `notes tui` opens the terminal interface; `notes update --check`, `notes version`, and `notes completion SHELL` provide maintenance commands.
-- Top-level commands accept short prefixes: `notes c` for categories, `co` for config, `com` for completion, `l` for list, `s` for show, and `sy` for sync. Other commands use `d`, `e`, `f`, `h`, `j`, `m`, `n`, `ta`, `t`, `u`, or `v`; longer prefixes work too.
+- Top-level commands accept short prefixes: `notes c` for categories, `co` for config, `com` for completion, `l` for list, `s` for show, and `sy` for sync. Other commands use `d`, `e`, `f`, `h`, `i`, `j`, `m`, `n`, `ta`, `t`, `u`, or `v`; longer prefixes work too.
 - Nested commands also accept unambiguous prefixes, such as `notes co rend`, `notes j a`, `notes ta rem`, and `notes sy stat`.
 
 For pipelines, path output has no color or headers. Use `--print0` for names with whitespace or newlines:

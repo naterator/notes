@@ -42,7 +42,7 @@ def terminal_output(argv: list[str], env: dict) -> bytes:
     return bytes(output).replace(b"\r\n", b"\n")
 
 
-def drive_tui(binary: str, config: Path, repo: Path, env: dict, keys: tuple[bytes | tuple[bytes, bytes], ...], probe_resize: bool = False, command: str = "tui", extra_flags: tuple[str, ...] = ()) -> bytes:
+def drive_tui(binary: str, config: Path, repo: Path, env: dict, keys: tuple[bytes | tuple[bytes, bytes], ...], probe_resize: bool = False, command: str = "tui", extra_flags: tuple[str, ...] = (), setup_answer: bytes | None = None) -> bytes:
     master, slave = pty.openpty()
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 100, 0, 0))
     proc = subprocess.Popen(
@@ -54,18 +54,28 @@ def drive_tui(binary: str, config: Path, repo: Path, env: dict, keys: tuple[byte
     )
     os.close(slave)
     output = bytearray()
-    deadline = time.monotonic() + 10
-    try:
-        while b"[FOCUS]" not in output and time.monotonic() < deadline:
+    def wait_for(marker: bytes) -> None:
+        deadline = time.monotonic() + 10
+        while marker not in output and time.monotonic() < deadline:
             if select.select([master], [], [], 0.2)[0]:
                 try:
-                    output.extend(os.read(master, 65536))
+                    chunk = os.read(master, 65536)
                 except OSError:
                     break
-        if b"[FOCUS]" not in output:
-            raise RuntimeError("TUI did not show the focused pane")
-        if b"smoke.md [FOCUS]" not in output:
-            raise RuntimeError(f"TUI did not focus the specified note: {output[-600:]!r}")
+                if not chunk:
+                    break
+                output.extend(chunk)
+        if marker not in output:
+            raise RuntimeError(f"TUI did not show {marker!r}: {output[-600:]!r}")
+
+    try:
+        if setup_answer is not None:
+            wait_for(b"[y/N]")
+            if (repo / ".git").exists():
+                raise RuntimeError("TUI initialized Git before receiving an answer")
+            os.write(master, setup_answer)
+        if setup_answer is None or setup_answer == b"y\n":
+            wait_for(b"smoke.md [FOCUS]")
         if probe_resize:
             fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 10, 70, 0, 0))
             os.kill(proc.pid, signal.SIGWINCH)
@@ -163,7 +173,8 @@ def main() -> int:
             raise RuntimeError(f"closed-pipe output failed: {producer.returncode}, {pipe_error[:200]!r}")
 
         git("init", "--bare", "-b", "main", str(remote))
-        git("init", "-b", "main", str(repo))
+        if notes("init") != (str(repo) + "\n").encode():
+            raise RuntimeError("init did not print the configured repository path")
         git("-C", str(repo), "remote", "add", "origin", str(remote))
         git("-C", str(repo), "config", "user.name", "Notes Smoke")
         git("-C", str(repo), "config", "user.email", "notes-smoke@example.invalid")
@@ -197,6 +208,18 @@ def main() -> int:
         no_editor_env = env.copy()
         no_editor_env.pop("EDITOR", None)
         no_editor_env.pop("VISUAL", None)
+        first_repo = base / "first notebook"
+        drive_tui(binary, tui_config, first_repo, no_editor_env, (), setup_answer=b"\n")
+        if first_repo.exists():
+            raise RuntimeError("TUI created a repository after the user declined")
+        first_repo.mkdir()
+        first_note = first_repo / "smoke.md"
+        first_note.write_bytes(b"# Existing Markdown\n")
+        drive_tui(binary, tui_config, first_repo, no_editor_env, (b"\x07", b"q"), setup_answer=b"y\n")
+        if git("-C", str(first_repo), "rev-parse", "--is-inside-work-tree") != b"true\n":
+            raise RuntimeError("TUI did not create a local Git repository after confirmation")
+        if first_note.read_bytes() != b"# Existing Markdown\n":
+            raise RuntimeError("TUI setup changed Markdown already in the directory")
         drive_tui(binary, tui_config, repo, no_editor_env, (b"\x07", b"q"), command="edit")
         output = drive_tui(binary, config, repo, env, (b"\x07", b"e", b"A", b" via TUI", b"\x1b", b"\x07", b"s", b"\x07", b"q"))
         saved = notes("show", "smoke.md")

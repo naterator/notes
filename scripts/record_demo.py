@@ -160,7 +160,8 @@ def main():
         try:
             session.wait("❯ ")
             session.type("notes tui")
-            session.key(b"\r", "[FOCUS]")
+            session.key(b"\r", "[y/N]")
+            session.key(b"y\r", "[FOCUS]")
             session.hold(1)
             session.new_note("Weekend plans", "weekend ideas")
             session.append("- Pick a trail\n- Pack lunch\n- Check the weather")
