@@ -11,7 +11,7 @@
 - A borderless TUI with search at the top, a note editor on the left, and tags/notes on the right; Traditional or Vim-style editing.
 - Optional automatic Git sync, themes, and explicit self-updates.
 
-![Recorded Notes session: creating and editing in the TUI, then CLI commands](assets/demo.gif)
+![Recorded Notes session: accepting repository setup, editing in the TUI, then using CLI commands](assets/demo.gif)
 
 [Replayable terminal recording](assets/demo.cast) · [Recording script](scripts/record_demo.py)
 
@@ -41,7 +41,7 @@ sudo install -m 0755 notes /usr/local/bin/notes
 
 - Settings: `${XDG_CONFIG_HOME:-$HOME/.config}/notes/config.toml`.
 - Notes: `${XDG_CONFIG_HOME:-$HOME/.config}/notes/repo` by default; use `--repo`, `NOTES_REPO`, or `notes config set repo PATH` to change it.
-- Run `notes init` to initialize the configured directory as a Git repository, or confirm the setup prompt when you open `notes tui`. Existing Markdown stays in place. CLI commands that write notes print setup instructions if the repository is missing. Read commands can still inspect loose Markdown.
+- Run `notes init` to initialize the configured directory as a Git repository. On first launch, `notes tui` asks before creating one. Press Enter to decline and exit. Existing Markdown stays in place, and read commands can inspect it before setup. If a command would write notes before setup, it prints the matching `notes init` command.
 
 Add your remote to enable syncing.
 
@@ -53,13 +53,28 @@ git -C "$repo" remote add origin YOUR_REMOTE_URL
 
 Git sync needs `user.name`, `user.email`, and a reachable `origin` remote. A local Git repository without an origin supports normal editing. You can turn off automatic sync with `notes config set git.auto_sync false`.
 
+## Quick start
+
+```sh
+notes init
+note=$(notes new "Release checklist" --category work)
+printf '# Release checklist\n\nDone.\n' | notes edit "$note" --stdin
+notes tags set "$note" planning/release
+notes list --tag-prefix planning --relative
+notes tags --tree --counts
+notes find release --note "$note" --matches
+notes tui "$note"
+```
+
+Tags use `/` for hierarchy, so `planning/release` appears under `planning` in the TUI tree and in `notes tags --tree`.
+
 ## Commands
 
 - `notes init` initializes the local Git repository and prints its path. It also accepts the global `--repo` and `--config` options.
 - `notes new "Idea" --tag inbox` creates a note and prints its path. Add `--category work`, `--path work/idea.md`, `--template FILE`, or `--stdin` as needed.
 - `notes show NOTE` prints exact Markdown. `notes edit NOTE` opens the TUI unless an external editor is configured. Use `notes edit NOTE --stdin < revised.md` to replace the entire note with exact Markdown from stdin.
 - `notes list` (`l`, `ls`) shows `base: REPO/` and repository-relative paths without a leading slash in a terminal. Each entry can be used with `notes delete NOTE`. In a pipeline it prints absolute paths; `notes find QUERY` also prints paths. Use `--tag` for exact tags, `--tag-prefix` for a tag and its descendants, or `--untagged`. Both commands also accept `--category`, `--sort`, `--limit`, `--relative`, `--print0`, `--json`, and `--long`. Use `notes find QUERY --note NOTE --matches` to show matching lines in one note, and `--regex` for a regular expression.
-- `notes tags`, `notes tags add NOTE TAG...`, and `notes tags remove NOTE TAG...` manage `#tags` in Markdown. Use `notes tags --tree --counts` to see the sidebar’s tag counts, including ancestors. `notes tags set NOTE TAG...` replaces the tag set. Pass `--yes` to remove omitted tags, including inline tags. Code, URLs, and escaped hashes are ignored.
+- `notes tags`, `notes tags add NOTE TAG...`, and `notes tags remove NOTE TAG...` manage `#tags` in Markdown. Use slash-separated tags such as `planning/release`; `notes tags --tree --counts` shows the sidebar’s tag counts, including ancestors. `notes tags set NOTE TAG...` replaces the tag set. Pass `--yes` to remove omitted tags, including inline tags. Code, URLs, and escaped hashes are ignored.
 - `notes move NOTE DESTINATION` (`mv`), `notes delete NOTE --yes` (`rm`), and `notes categories` (`cats`) manage files and folders.
 - `notes journal` prints today's journal path. `notes journal add "Reviewed notes" --section actions --tag work` appends an entry; use `--date YYYY-MM-DD` for another day.
 - `notes sync` (`save`) commits note changes, pulls from `origin`, and pushes. `notes sync status --json` inspects local state without network access.

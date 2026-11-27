@@ -1,6 +1,9 @@
-"""Record a real Notes TUI-then-CLI session as an asciicast v2 file.
+r"""Record a real Notes TUI-then-CLI session as an asciicast v2 file.
 
 Usage: python3 scripts/record_demo.py /path/to/notes assets/demo.cast
+Render the GIF with asciinema agg 1.9.0:
+    agg --theme nord --text-font-family Menlo --font-size 18 --line-height 1.35 \
+        --speed 1.15 --fps-cap 18 --last-frame-duration 2.5 assets/demo.cast assets/demo.gif
 Only temporary sample notes/config are used. No terminal output is fabricated.
 """
 
@@ -38,14 +41,15 @@ class Recording:
             env.pop(key, None)
         env.update({
             "NOTES_CONFIG": str(config), "NOTES_REPO": str(base / "repo"),
-            "NOTES_THEME": "catppuccin-mocha", "NOTES_COLOR": "always",
+            "NOTES_COLOR": "always",
+            "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
             "TERM": "xterm-256color", "COLORTERM": "truecolor",
             "PATH": str(base / "bin") + os.pathsep + env["PATH"],
             "HISTFILE": os.devnull,
             "XDG_STATE_HOME": str(base / "state"),
             "XDG_CACHE_HOME": str(base / "cache"),
             "BASH_SILENCE_DEPRECATION_WARNING": "1",
-            "PS1": "\\[\\e[38;2;203;166;247m\\]❯ \\[\\e[0m\\]",
+            "PS1": "\\[\\e[38;2;143;188;187m\\]❯ \\[\\e[0m\\]",
         })
 
         def controlling_terminal():
@@ -161,6 +165,7 @@ def main():
             session.wait("❯ ")
             session.type("notes tui")
             session.key(b"\r", "[y/N]")
+            session.hold(1.8)
             session.key(b"y\r", "[FOCUS]")
             session.hold(1)
             session.new_note("Weekend plans", "weekend ideas")
@@ -177,12 +182,12 @@ def main():
             session.key(b"\x07")
             session.key(b"q", "❯ ")
             session.key(b"\x0c")
-            session.command('notes new "Reading list" --category personal --tag books')
-            session.command("notes list --relative")
+            session.command('notes new "Reading list" --category personal --tag reading/books')
+            session.command("notes list --tag-prefix reading --relative")
             session.command('notes show "$(notes find \'Weekend plans\')"', pause=2.5)
             session.key(b"\x0c")
             session.command("notes find jacket --relative")
-            session.command("notes tags")
+            session.command("notes tags --tree --counts")
             session.command('notes journal add "Planned the weekend" --section activities --tag weekend --date 2026-09-29')
             session.hold(2)
             weekend = list((base / "repo").rglob("*weekend-plans.md"))
