@@ -11,8 +11,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	store "github.com/naterator/notes"
 	"github.com/naterator/notes/internal/config"
-	"github.com/naterator/notes/internal/store"
 	"github.com/naterator/notes/internal/syncgit"
 )
 
@@ -25,10 +25,10 @@ func modelFixture(t *testing.T, mode string) *Model {
 	c.Git.AutoSync = false
 	c.TUI.EditorMode = mode
 	s := store.New(c.Repo, c.StateDir)
-	if _, e := s.Create(store.NewOptions{Title: "Question?", Path: "question.md"}); e != nil {
+	if _, e := s.Create(context.Background(), store.NewOptions{Title: "Question?", Path: "question.md"}); e != nil {
 		t.Fatal(e)
 	}
-	m, e := NewModel(c, s, "")
+	m, e := NewModel(context.Background(), c, s, "")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -65,11 +65,11 @@ func TestLocalRepoWithoutOriginShowsSetupHint(t *testing.T) {
 
 func TestLargeNoteUsesExternalEditor(t *testing.T) {
 	m := modelFixture(t, "vim")
-	large := strings.Repeat(strings.Repeat("a", 1023)+"\n", store.MaxEditable/1024+1)
+	large := strings.Repeat(strings.Repeat("a", 1023)+"\n", maxEditable/1024+1)
 	if err := os.WriteFile(filepath.Join(m.Store.Repo, "question.md"), []byte(large), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewModel(m.Config, m.Store, "question.md"); err == nil || !strings.Contains(err.Error(), "notes edit") {
+	if _, err := NewModel(context.Background(), m.Config, m.Store, "question.md"); err == nil || !strings.Contains(err.Error(), "notes edit") {
 		t.Fatalf("large note entered TUI editor: %v", err)
 	}
 }
@@ -125,7 +125,7 @@ func TestSpecificNoteStartsInEditor(t *testing.T) {
 	for _, mode := range []string{"vim", "traditional", "ask"} {
 		t.Run(mode, func(t *testing.T) {
 			fixture := modelFixture(t, mode)
-			m, err := NewModel(fixture.Config, fixture.Store, "question.md")
+			m, err := NewModel(context.Background(), fixture.Config, fixture.Store, "question.md")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -375,7 +375,7 @@ func TestConflictRecoveryKeepsBothVersions(t *testing.T) {
 	if e != nil || string(b) != want {
 		t.Fatalf("recovery content: %q, %v", b, e)
 	}
-	items, e := m.Store.List()
+	items, e := m.Store.List(context.Background())
 	if e != nil || len(items) != 1 {
 		t.Fatalf("recovery draft appeared in note index: %v, %v", items, e)
 	}
@@ -428,7 +428,7 @@ func TestPasteAndUnfocusedVisualSelection(t *testing.T) {
 	if e := m.save(); e != nil {
 		t.Fatal(e)
 	}
-	n, e := m.Store.Read("question.md")
+	n, e := m.Store.Read(context.Background(), "question.md")
 	if e != nil || !strings.HasPrefix(string(n.Content), pasted) {
 		t.Fatalf("pasted bytes changed on save: %q, %v", n.Content, e)
 	}
@@ -579,7 +579,7 @@ func TestTagRemovalPreviewsAffectedLines(t *testing.T) {
 }
 func TestTagTreeExpansionAndParentFilter(t *testing.T) {
 	m := modelFixture(t, "vim")
-	if _, e := m.Store.Create(store.NewOptions{Title: "Alpha", Path: "alpha.md", Tags: []string{"work/project"}}); e != nil {
+	if _, e := m.Store.Create(context.Background(), store.NewOptions{Title: "Alpha", Path: "alpha.md", Tags: []string{"work/project"}}); e != nil {
 		t.Fatal(e)
 	}
 	if e := m.refresh(); e != nil {

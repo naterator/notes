@@ -1,7 +1,8 @@
-package store
+package notes
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"os"
 	"path/filepath"
@@ -46,17 +47,17 @@ func TestNonRegularMarkdownFailsBeforeReading(t *testing.T) {
 	if err := syscall.Mkfifo(filepath.Join(s.Repo, "pipe.md"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Read("pipe.md"); err == nil || !strings.Contains(err.Error(), "not a regular note") {
+	if _, err := s.Read(context.Background(), "pipe.md"); err == nil || !strings.Contains(err.Error(), "not a regular note") {
 		t.Fatalf("FIFO was read or accepted: %v", err)
 	}
-	if _, err := s.List(); err == nil || !strings.Contains(err.Error(), "not a regular note") {
+	if _, err := s.List(context.Background()); err == nil || !strings.Contains(err.Error(), "not a regular note") {
 		t.Fatalf("list silently accepted FIFO: %v", err)
 	}
 }
 func TestRecoveryDraftOutsideRepository(t *testing.T) {
 	s := fixture(t)
 	content := []byte("# Local draft\n\nUnsaved #tag\n")
-	path, err := s.SaveRecovery("notes/external.md", content)
+	path, err := s.SaveRecovery(context.Background(), "notes/external.md", content)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,14 +79,14 @@ func TestRecoveryDraftOutsideRepository(t *testing.T) {
 func TestRoundTripAndContainment(t *testing.T) {
 	s := fixture(t)
 	now := time.Date(2026, 9, 28, 10, 30, 0, 0, time.Local)
-	n, err := s.Create(NewOptions{Title: "Release checklist", Category: "work", Tags: []string{"work"}, Now: now})
+	n, err := s.Create(context.Background(), NewOptions{Title: "Release checklist", Category: "work", Tags: []string{"work"}, Now: now})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if n.Title != "Release checklist" || !reflect.DeepEqual(n.Tags, []string{"work"}) {
 		t.Fatalf("unexpected note: %+v", n)
 	}
-	if _, err = s.Create(NewOptions{Title: "duplicate", Path: n.ID}); err == nil {
+	if _, err = s.Create(context.Background(), NewOptions{Title: "duplicate", Path: n.ID}); err == nil {
 		t.Fatal("duplicate replaced")
 	}
 	if _, _, err = s.Resolve("../outside.md"); err == nil {
@@ -94,37 +95,37 @@ func TestRoundTripAndContainment(t *testing.T) {
 	if _, _, err = s.Resolve(".git/config.md"); err == nil {
 		t.Fatal("control path accepted")
 	}
-	if err = s.Save(n.ID, sha256.Sum256(n.Content), []byte("# Edited\n")); err != nil {
+	if err = s.Save(context.Background(), n.ID, sha256.Sum256(n.Content), []byte("# Edited\n")); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.Save(n.ID, sha256.Sum256(n.Content), []byte("# stale\n")); err == nil {
+	if err = s.Save(context.Background(), n.ID, sha256.Sum256(n.Content), []byte("# stale\n")); err == nil {
 		t.Fatal("stale save overwritten")
 	}
-	m, err := s.Move(n.ID, "archive/release.md")
+	m, err := s.Move(context.Background(), n.ID, "archive/release.md")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if m.Title != "Edited" || m.ID != "archive/release.md" {
 		t.Fatalf("move: %+v", m)
 	}
-	if err = s.Delete(m.ID); err != nil {
+	if err = s.Delete(context.Background(), m.ID); err != nil {
 		t.Fatal(err)
 	}
-	items, err := s.List()
+	items, err := s.List(context.Background())
 	if err != nil || len(items) != 0 {
 		t.Fatalf("remaining: %v, %v", items, err)
 	}
 }
 func TestDeleteRejectsExternalChange(t *testing.T) {
 	s := fixture(t)
-	n, err := s.Create(NewOptions{Title: "Keep", Path: "keep.md"})
+	n, err := s.Create(context.Background(), NewOptions{Title: "Keep", Path: "keep.md"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(n.Path, []byte("# Changed elsewhere\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteIfUnchanged(n.ID, sha256.Sum256(n.Content)); err == nil {
+	if err := s.DeleteIfUnchanged(context.Background(), n.ID, sha256.Sum256(n.Content)); err == nil {
 		t.Fatal("deleted a note that changed after confirmation")
 	}
 	if got, err := os.ReadFile(n.Path); err != nil || string(got) != "# Changed elsewhere\n" {
@@ -136,7 +137,7 @@ func TestSaveFailurePreservesOriginal(t *testing.T) {
 		t.Skip("root can write through read-only directory permissions")
 	}
 	s := fixture(t)
-	n, err := s.Create(NewOptions{Title: "Original", Path: "original.md"})
+	n, err := s.Create(context.Background(), NewOptions{Title: "Original", Path: "original.md"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +145,7 @@ func TestSaveFailurePreservesOriginal(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.Chmod(s.Repo, 0700)
-	if err := s.Save(n.ID, sha256.Sum256(n.Content), []byte("# Replacement\n")); err == nil {
+	if err := s.Save(context.Background(), n.ID, sha256.Sum256(n.Content), []byte("# Replacement\n")); err == nil {
 		t.Fatal("save succeeded without permission to stage atomic replacement")
 	}
 	content, err := os.ReadFile(n.Path)
@@ -235,14 +236,14 @@ func TestIndentedCodeIsNotManagedTags(t *testing.T) {
 func TestJournalReuseAndSections(t *testing.T) {
 	s := fixture(t)
 	now := time.Date(2026, 9, 28, 10, 30, 0, 0, time.UTC)
-	n, err := s.AddJournal("", "UTC", "actions", "Send update", []string{"work"}, now)
+	n, err := s.AddJournal(context.Background(), "", "UTC", "actions", "Send update", []string{"work"}, now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if n.ID != "journal/2026/09/2026-09-28.md" {
 		t.Fatal(n.ID)
 	}
-	_, err = s.AddJournal("", "UTC", "notes", "First line\nSecond line", nil, now)
+	_, err = s.AddJournal(context.Background(), "", "UTC", "notes", "First line\nSecond line", nil, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +261,7 @@ func TestJournalReuseAndSections(t *testing.T) {
 func TestJournalSectionDetectionPreservesMarkdownAndCRLF(t *testing.T) {
 	s := fixture(t)
 	now := time.Date(2026, 11, 1, 1, 30, 0, 0, time.UTC)
-	n, err := s.EnsureJournal("2026-11-01", "America/Chicago", now)
+	n, err := s.EnsureJournal(context.Background(), "2026-11-01", "America/Chicago", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +269,7 @@ func TestJournalSectionDetectionPreservesMarkdownAndCRLF(t *testing.T) {
 	if err := os.WriteFile(n.Path, []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.AddJournal("2026-11-01", "America/Chicago", "actions", "New action", nil, now)
+	_, err = s.AddJournal(context.Background(), "2026-11-01", "America/Chicago", "actions", "New action", nil, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +306,7 @@ func TestJournalMissingSectionAndTimezoneBoundary(t *testing.T) {
 	if err != nil || date != "2026-03-08" {
 		t.Fatalf("after DST date: %q, %v", date, err)
 	}
-	n, err := s.EnsureJournal("2026-03-08", "America/Chicago", now)
+	n, err := s.EnsureJournal(context.Background(), "2026-03-08", "America/Chicago", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -313,7 +314,7 @@ func TestJournalMissingSectionAndTimezoneBoundary(t *testing.T) {
 	if err := os.WriteFile(n.Path, []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.AddJournal("2026-03-08", "America/Chicago", "notes", "First line\nSecond line", nil, now)
+	_, err = s.AddJournal(context.Background(), "2026-03-08", "America/Chicago", "notes", "First line\nSecond line", nil, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -334,13 +335,13 @@ func TestSymlinkContainmentAndUnicodeTags(t *testing.T) {
 	if e := os.Symlink(outside, filepath.Join(s.Repo, "link")); e != nil {
 		t.Fatal(e)
 	}
-	if _, e := s.Create(NewOptions{Title: "escape", Path: "link/escape.md"}); e == nil {
+	if _, e := s.Create(context.Background(), NewOptions{Title: "escape", Path: "link/escape.md"}); e == nil {
 		t.Fatal("created note through symlink")
 	}
 	if _, e := os.Stat(filepath.Join(outside, "escape.md")); !os.IsNotExist(e) {
 		t.Fatalf("outside path touched: %v", e)
 	}
-	n, e := s.Create(NewOptions{Title: "Unicode", Tags: []string{"#Café", "#研究"}})
+	n, e := s.Create(context.Background(), NewOptions{Title: "Unicode", Tags: []string{"#Café", "#研究"}})
 	if e != nil {
 		t.Fatal(e)
 	}

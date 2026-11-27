@@ -37,12 +37,13 @@ type Editor struct {
 	repeatChangeLine    bool
 	repeatChangeText    string
 	lastEdit            string
+	lastCount           int
 }
 
 func NewEditor(flavor, content string) Editor {
 	a := textarea.New()
 	a.ShowLineNumbers = false
-	// Store enforces the note-size limit; the display widget must not truncate
+	// The TUI enforces the note-size limit; the display widget must not truncate
 	// a note at Bubbles' default 400 characters or 99 logical lines.
 	a.CharLimit = 0
 	a.MaxHeight = 0
@@ -150,9 +151,20 @@ func (e *Editor) render() {
 		targetRow, targetCol = displayRow, displayCol
 	}
 	e.Area.SetValue(b.String())
-	e.Area.MoveToBegin()
-	for i := 0; i < targetRow; i++ {
-		e.Area.CursorDown()
+	// CursorUp/Down traverse screen rows, which can include soft wraps.
+	// Find the logical row before applying its rune column.
+	if targetRow > e.Area.LineCount()/2 {
+		e.Area.MoveToEnd()
+		for e.Area.Line() > targetRow {
+			e.Area.CursorStart()
+			e.Area.CursorUp()
+		}
+	} else {
+		e.Area.MoveToBegin()
+		for e.Area.Line() < targetRow {
+			e.Area.CursorEnd()
+			e.Area.CursorDown()
+		}
 	}
 	e.Area.SetCursorColumn(targetCol)
 	// The widget refreshes viewport content lazily in View. Refresh it before
@@ -204,6 +216,8 @@ func (e *Editor) Escape() {
 		e.Mode = "NORMAL"
 		if e.Flavor == "traditional" {
 			e.Mode = "COMMAND"
+		} else if e.Pos > e.lineStart(e.Pos) {
+			e.Pos--
 		}
 	} else if e.Mode == "VISUAL" || e.Mode == "VISUAL_LINE" {
 		e.Mode = "NORMAL"
@@ -287,12 +301,23 @@ func (e *Editor) prevLine(p int) int {
 	}
 	return e.lineStart(start - 1)
 }
+func wordClass(r rune) int {
+	switch {
+	case unicode.IsSpace(r):
+		return 0
+	case unicode.IsLetter(r) || unicode.IsNumber(r) || unicode.IsMark(r) || r == '_':
+		return 1
+	default:
+		return 2
+	}
+}
+
 func (e *Editor) nextWord(p int) int {
-	if p >= len(e.Text) {
+	if p == len(e.Text) {
 		return p
 	}
-	space := unicode.IsSpace(e.Text[p])
-	for p < len(e.Text) && unicode.IsSpace(e.Text[p]) == space {
+	kind := wordClass(e.Text[p])
+	for p < len(e.Text) && wordClass(e.Text[p]) == kind {
 		p++
 	}
 	for p < len(e.Text) && unicode.IsSpace(e.Text[p]) {
@@ -300,80 +325,151 @@ func (e *Editor) nextWord(p int) int {
 	}
 	return p
 }
+
 func (e *Editor) prevWord(p int) int {
-	if p <= 0 {
+	if p == 0 {
 		return 0
 	}
 	p--
 	for p > 0 && unicode.IsSpace(e.Text[p]) {
 		p--
 	}
-	for p > 0 && !unicode.IsSpace(e.Text[p-1]) {
+	kind := wordClass(e.Text[p])
+	for p > 0 && wordClass(e.Text[p-1]) == kind {
 		p--
 	}
 	return p
 }
+
 func (e *Editor) endWord(p int) int {
 	for p < len(e.Text) && unicode.IsSpace(e.Text[p]) {
 		p++
 	}
-	for p+1 < len(e.Text) && !unicode.IsSpace(e.Text[p+1]) {
+	if p == len(e.Text) {
+		return p
+	}
+	kind := wordClass(e.Text[p])
+	for p+1 < len(e.Text) && wordClass(e.Text[p+1]) == kind {
 		p++
 	}
 	return p
 }
-func (e *Editor) move(key string, count int) {
-	if count < 1 {
-		count = 1
+
+func (e *Editor) firstNonblank(start int) int {
+	end := e.lineEnd(start)
+	for start < end && (e.Text[start] == ' ' || e.Text[start] == '\t') {
+		start++
 	}
-	for i := 0; i < count; i++ {
-		switch key {
-		case "h", "left":
-			if e.Pos > 0 {
-				e.Pos--
-			}
-		case "l", "right":
-			if e.Pos < len(e.Text) {
-				e.Pos++
-			}
-		case "j", "down":
-			col := e.Pos - e.lineStart(e.Pos)
-			n := e.nextLine(e.Pos)
-			e.Pos = n + min(col, e.lineEnd(n)-n)
-		case "k", "up":
-			col := e.Pos - e.lineStart(e.Pos)
-			n := e.prevLine(e.Pos)
-			e.Pos = n + min(col, e.lineEnd(n)-n)
-		case "w":
-			e.Pos = e.nextWord(e.Pos)
-		case "b":
-			e.Pos = e.prevWord(e.Pos)
-		case "e":
-			e.Pos = e.endWord(e.Pos)
-		case "0", "^":
-			e.Pos = e.lineStart(e.Pos)
-		case "$":
-			e.Pos = e.lineEnd(e.Pos)
-		case "G":
-			e.Pos = len(e.Text)
-		case "ctrl+f":
-			for j := 0; j < 15; j++ {
-				e.Pos = e.nextLine(e.Pos)
-			}
-		case "ctrl+b":
-			for j := 0; j < 15; j++ {
-				e.Pos = e.prevLine(e.Pos)
-			}
-		case "ctrl+d":
-			for j := 0; j < 7; j++ {
-				e.Pos = e.nextLine(e.Pos)
-			}
-		case "ctrl+u":
-			for j := 0; j < 7; j++ {
-				e.Pos = e.prevLine(e.Pos)
-			}
+	return start
+}
+
+func (e *Editor) lastLine() int {
+	end := len(e.Text)
+	if end > 0 && e.Text[end-1] == '\n' {
+		end--
+	}
+	return e.lineStart(end)
+}
+
+func (e *Editor) jumpLine(line int) {
+	last := e.lastLine()
+	pos := last
+	if line > 0 {
+		pos = 0
+		for i := 1; i < line && pos < last; i++ {
+			pos = e.nextLine(pos)
 		}
 	}
+	e.Pos = e.firstNonblank(pos)
+	e.render()
+}
+
+// motion calculates a position without changing the buffer or repainting it.
+// Operators may use a line end as an exclusive range, even in Vim mode.
+func (e *Editor) motion(key string, count int, operator bool) int {
+	pos := e.Pos
+	last := e.lastLine()
+	vim := e.Flavor == "vim" && e.Mode != "INSERT"
+	switch key {
+	case "ctrl+f", "ctrl+b", "ctrl+d", "ctrl+u":
+		page := max(1, e.Area.Height()-1)
+		if key == "ctrl+d" || key == "ctrl+u" {
+			page = max(1, page/2)
+		}
+		count = min(count*page, len(e.Text)+1)
+		if key == "ctrl+f" || key == "ctrl+d" {
+			key = "j"
+		} else {
+			key = "k"
+		}
+	case "$":
+		for i := 1; i < count && pos < last; i++ {
+			pos = e.nextLine(pos)
+		}
+		start := e.lineStart(pos)
+		pos = e.lineEnd(pos)
+		if vim && !operator && start < pos {
+			pos--
+		}
+		return pos
+	}
+	for i := 0; i < count; i++ {
+		before := pos
+		switch key {
+		case "h", "left":
+			if pos > 0 && (!vim || pos > e.lineStart(pos)) {
+				pos--
+			}
+		case "l", "right":
+			if vim {
+				if end := e.lineEnd(pos); pos < end-1 || operator && pos < end {
+					pos++
+				}
+			} else if pos < len(e.Text) {
+				pos++
+			}
+		case "j", "down", "k", "up":
+			start := e.lineStart(pos)
+			to := e.prevLine(pos)
+			if key == "j" || key == "down" {
+				if e.lineEnd(pos) == len(e.Text) || vim && start >= last {
+					return pos
+				}
+				to = e.nextLine(pos)
+			} else if start == 0 {
+				return pos
+			}
+			end := e.lineEnd(to)
+			if vim && to < end {
+				end--
+			}
+			pos = min(to+pos-start, end)
+		case "w":
+			pos = e.nextWord(pos)
+			if vim && !operator && pos == len(e.Text) {
+				pos = max(last, e.lineEnd(last)-1)
+			}
+		case "b":
+			pos = e.prevWord(pos)
+		case "e":
+			pos = e.endWord(min(pos+1, len(e.Text)))
+			if vim && !operator && pos == len(e.Text) {
+				pos = max(last, e.lineEnd(last)-1)
+			}
+		case "0":
+			pos = e.lineStart(pos)
+		case "^":
+			pos = e.firstNonblank(e.lineStart(pos))
+		}
+		if pos == before {
+			break
+		}
+	}
+	return pos
+}
+
+func (e *Editor) move(key string, count int) {
+	e.Pos = e.motion(key, max(1, count), false)
 	e.render()
 }
 func (e *Editor) UndoEdit() {
@@ -397,21 +493,44 @@ func (e *Editor) RedoEdit() {
 func (e *Editor) operation(op, motion string, count int) {
 	before := e.snapshot()
 	a, b := e.Pos, e.Pos
-	if motion == op && (op == "d" || op == "c" || op == "y") {
+	linewise := motion == op || motion == "j" || motion == "k" || motion == "G"
+	if linewise {
 		a = e.lineStart(e.Pos)
-		b = e.nextLine(e.Pos)
-		for i := 1; i < count; i++ {
-			b = e.nextLine(b)
+		switch motion {
+		case "k":
+			b = e.nextLine(e.Pos)
+			for i := 0; i < count && a > 0; i++ {
+				a = e.prevLine(a)
+			}
+		case "G":
+			b = len(e.Text)
+		default:
+			lines := count
+			if motion == "j" {
+				lines++
+			}
+			b = a
+			for i := 0; i < lines && b < len(e.Text); i++ {
+				b = e.nextLine(b)
+			}
 		}
 	} else {
-		e.move(motion, count)
-		b = e.Pos
-		e.Pos = before.Pos
-		if motion == "e" && b < len(e.Text) {
-			b++
-		}
-		if motion == "$" {
-			b = e.lineEnd(a)
+		switch motion {
+		case "h", "l", "w", "b", "e", "0", "^", "$":
+			b = e.motion(motion, count, true)
+			if motion == "e" && b < len(e.Text) {
+				b++
+			}
+			if motion == "w" && a < len(e.Text) && !unicode.IsSpace(e.Text[a]) {
+				if count == 1 && op == "c" {
+					b = min(e.endWord(a)+1, len(e.Text))
+				} else {
+					lastWord := e.motion("w", count-1, true)
+					b = min(b, e.lineEnd(lastWord))
+				}
+			}
+		default:
+			return
 		}
 	}
 	if a > b {
@@ -426,12 +545,20 @@ func (e *Editor) operation(op, motion string, count int) {
 		return
 	}
 	e.Register = string(e.Text[a:b])
-	e.RegisterLine = motion == op
+	e.RegisterLine = linewise
 	if op == "d" || op == "c" {
+		if linewise && op == "d" && b == len(e.Text) && a > 0 && e.Text[b-1] != '\n' {
+			a--
+		}
 		e.deleteRange(a, b)
+		if linewise && op == "d" {
+			e.Pos = e.firstNonblank(e.lineStart(min(e.Pos, e.lastLine())))
+			e.render()
+		}
 		e.lastEdit = op + motion
+		e.lastCount = count
 		if op == "c" {
-			if e.RegisterLine {
+			if e.RegisterLine && strings.HasSuffix(e.Register, "\n") {
 				e.insert("\n")
 				e.Pos = a
 				e.render()
@@ -456,8 +583,8 @@ func (e *Editor) repeatSelectionRange(count int, linewise bool) (int, int) {
 	return a, b
 }
 func (e *Editor) handleNormal(k string) bool {
-	if len(k) == 1 && k[0] >= '1' && k[0] <= '9' || e.Count > 0 && len(k) == 1 && k[0] >= '0' && k[0] <= '9' {
-		e.Count = e.Count*10 + int(k[0]-'0')
+	if e.Prefix != "r" && len(k) == 1 && (k[0] >= '1' && k[0] <= '9' || k[0] == '0' && e.Count > 0) {
+		e.Count = min(e.Count*10+int(k[0]-'0'), 1_000_000)
 		return false
 	}
 	hadCount := e.Count > 0
@@ -471,20 +598,34 @@ func (e *Editor) handleNormal(k string) bool {
 		e.Prefix = ""
 		if prefix == "g" {
 			if k == "g" {
-				e.Pos = 0
-				for i := 1; i < max(1, e.PendingCount); i++ {
-					e.Pos = e.nextLine(e.Pos)
-				}
-				e.render()
+				e.jumpLine(max(1, e.PendingCount))
 			}
 			e.PendingCount = 0
 			return false
 		}
 		if prefix == "d" || prefix == "c" || prefix == "y" {
-			e.operation(prefix, k, count*max(1, e.PendingCount))
+			e.operation(prefix, k, min(count*max(1, e.PendingCount), len(e.Text)+1))
 			e.PendingCount = 0
 			return true
 		}
+		if prefix == "r" && k == "space" {
+			k = " "
+		}
+		if replacement := []rune(k); prefix == "r" && len(replacement) == 1 {
+			end := e.Pos + max(1, e.PendingCount)
+			if end <= e.lineEnd(e.Pos) {
+				before := e.snapshot()
+				for pos := e.Pos; pos < end; pos++ {
+					e.Text[pos] = replacement[0]
+				}
+				e.Pos = end - 1
+				e.pushUndo(before)
+				e.lastEdit = "r" + k
+				e.lastCount = max(1, e.PendingCount)
+				e.render()
+			}
+		}
+		e.PendingCount = 0
 		return false
 	}
 	if e.Mode == "VISUAL" || e.Mode == "VISUAL_LINE" {
@@ -532,24 +673,28 @@ func (e *Editor) handleNormal(k string) bool {
 	case "h", "j", "k", "l", "left", "right", "up", "down", "w", "b", "e", "0", "^", "$", "ctrl+f", "ctrl+b", "ctrl+d", "ctrl+u":
 		e.move(k, count)
 	case "G":
+		line := 0
 		if hadCount {
-			e.Pos = 0
-			for i := 1; i < count; i++ {
-				e.Pos = e.nextLine(e.Pos)
-			}
-			e.render()
-		} else {
-			e.move("G", 1)
+			line = count
 		}
+		e.jumpLine(line)
+	case "r":
+		e.Prefix, e.PendingCount = k, count
+	case "D":
+		e.operation("d", "$", count)
+	case "C":
+		e.operation("c", "$", count)
+	case "Y":
+		e.operation("y", "y", count)
 	case "i":
 		e.beginInsert()
 	case "a":
-		if e.Pos < len(e.Text) {
+		if e.Pos < e.lineEnd(e.Pos) {
 			e.Pos++
 		}
 		e.beginInsert()
 	case "I":
-		e.Pos = e.lineStart(e.Pos)
+		e.Pos = e.firstNonblank(e.lineStart(e.Pos))
 		e.beginInsert()
 	case "A":
 		e.Pos = e.lineEnd(e.Pos)
@@ -567,29 +712,55 @@ func (e *Editor) handleNormal(k string) bool {
 		e.beginInsertFrom(before)
 	case "x":
 		before := e.snapshot()
-		if e.Pos < len(e.Text) {
-			e.deleteRange(e.Pos, e.Pos+count)
+		if end := e.lineEnd(e.Pos); e.Pos < end {
+			to := min(end, e.Pos+count)
+			e.Register, e.RegisterLine = string(e.Text[e.Pos:to]), false
+			e.deleteRange(e.Pos, to)
+			if e.Pos > e.lineStart(e.Pos) && e.Pos == e.lineEnd(e.Pos) {
+				e.Pos--
+				e.render()
+			}
 			e.pushUndo(before)
-			e.lastEdit = "x"
+			e.lastEdit, e.lastCount = "x", count
 		}
 	case "p", "P":
 		if e.Register != "" {
 			before := e.snapshot()
+			text := e.Register
+			// Limit repeat counts to the maximum editor size.
+			count = min(count, max(1, maxEditable/len(text)))
 			if e.RegisterLine {
 				if k == "p" {
 					e.Pos = e.nextLine(e.Pos)
-					if e.Pos == len(e.Text) && e.Pos > 0 && e.Text[e.Pos-1] != '\n' {
-						e.insert("\n")
-					}
 				} else {
 					e.Pos = e.lineStart(e.Pos)
 				}
-			} else if k == "p" && e.Pos < len(e.Text) {
-				e.Pos++
+				if !strings.HasSuffix(text, "\n") && (e.Pos < len(e.Text) || count > 1) {
+					text += "\n"
+				}
+				text = strings.Repeat(text, count)
+				if e.Pos == len(e.Text) && e.Pos > 0 && e.Text[e.Pos-1] != '\n' {
+					text = "\n" + text
+				}
+			} else {
+				if k == "p" && e.Pos < e.lineEnd(e.Pos) {
+					e.Pos++
+				}
+				text = strings.Repeat(text, count)
 			}
-			e.insert(e.Register)
+			start := e.Pos
+			e.insert(text)
+			if e.RegisterLine {
+				if strings.HasPrefix(text, "\n") && start > 0 && e.Text[start-1] != '\n' {
+					start++
+				}
+				e.Pos = e.firstNonblank(start)
+			} else if e.Pos > start {
+				e.Pos--
+			}
+			e.render()
 			e.pushUndo(before)
-			e.lastEdit = k
+			e.lastEdit, e.lastCount = k, count
 		}
 	case "u":
 		e.UndoEdit()
@@ -638,11 +809,17 @@ func (e *Editor) handleNormal(k string) bool {
 				}
 			} else if strings.HasPrefix(last, "insert:") {
 				e.insertWithUndo(strings.TrimPrefix(last, "insert:"))
-			} else if len(last) == 2 && strings.ContainsRune("dcy", rune(last[0])) {
-				e.handleNormal(last[:1])
-				e.handleNormal(last[1:])
 			} else {
-				e.handleNormal(last)
+				if !hadCount {
+					count = max(1, e.lastCount)
+				}
+				e.Count = count
+				if len(last) > 1 && strings.ContainsRune("dcyr", rune(last[0])) {
+					e.handleNormal(last[:1])
+					e.handleNormal(last[1:])
+				} else {
+					e.handleNormal(last)
+				}
 			}
 		}
 	}
@@ -748,7 +925,9 @@ func (e *Editor) SetFlavor(flavor string) {
 	if e.Flavor == flavor {
 		return
 	}
+	pos := e.Pos
 	e.Escape()
+	e.Pos = pos
 	e.Flavor = flavor
 	e.Mode = "NORMAL"
 	if flavor == "traditional" {

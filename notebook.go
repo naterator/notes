@@ -1,7 +1,9 @@
-package store
+// Package notes provides local Markdown notebook operations.
+package notes
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -19,8 +21,9 @@ import (
 	"unicode/utf8"
 )
 
-const MaxEditable = 2 << 20
-
+// Store accesses a local notebook. Use the same StateDir in cooperating
+// processes to serialize writes to the same repository. Store operations do
+// not read user preferences, initialize Git, or contact remotes.
 type Store struct{ Repo, StateDir string }
 type Note struct {
 	ID         string    `json:"id"`
@@ -32,10 +35,28 @@ type Note struct {
 	Content    []byte    `json:"-"`
 }
 
-func New(repo, state string) *Store { return &Store{Repo: repo, StateDir: state} }
+// New uses explicit repository and state directories. Pass absolute paths.
+func New(repo, state string) *Store {
+	return &Store{Repo: repo, StateDir: state}
+}
+
+// Revision identifies the exact Markdown read from disk. Pass it to Save
+// or DeleteIfUnchanged to detect changes made since the read.
+func (n Note) Revision() [32]byte { return sha256.Sum256(n.Content) }
+
+// ErrChanged indicates that a note no longer matches the expected revision.
+var ErrChanged = errors.New("note changed on disk")
+
+type changedError string
+
+func (e changedError) Error() string { return string(e) }
+func (e changedError) Unwrap() error { return ErrChanged }
 
 // SaveRecovery keeps a conflicted editor buffer outside the Git working tree.
-func (s *Store) SaveRecovery(id string, content []byte) (string, error) {
+func (s *Store) SaveRecovery(ctx context.Context, id string, content []byte) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if !utf8.Valid(content) {
 		return "", fmt.Errorf("recovery content is not UTF-8")
 	}
@@ -83,7 +104,10 @@ func (s *Store) lockPath() (string, error) {
 	sum := sha256.Sum256([]byte(repo))
 	return filepath.Join(s.StateDir, "repo-"+hex.EncodeToString(sum[:8])+".lock"), nil
 }
-func (s *Store) lock() (func(), error) {
+func (s *Store) lock(ctx context.Context) (func(), error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(s.StateDir, 0700); err != nil {
 		return nil, err
 	}
@@ -95,15 +119,33 @@ func (s *Store) lock() (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		f.Close()
-		return nil, err
+	for {
+		err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			if err = ctx.Err(); err == nil {
+				break
+			}
+			_ = f.Close()
+			return nil, err
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EINTR) {
+			_ = f.Close()
+			return nil, err
+		}
+		timer := time.NewTimer(20 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			_ = f.Close()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
 	}
 	return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); _ = f.Close() }, nil
 }
 
 // Lock serializes app-managed writes and Git transactions for this repository.
-func (s *Store) Lock() (func(), error) { return s.lock() }
+func (s *Store) Lock(ctx context.Context) (func(), error) { return s.lock(ctx) }
 func (s *Store) Resolve(id string) (string, string, error) {
 	if id == "" {
 		return "", "", fmt.Errorf("empty note path")
@@ -143,7 +185,10 @@ func (s *Store) Resolve(id string) (string, string, error) {
 	}
 	return abs, filepath.ToSlash(rel), nil
 }
-func (s *Store) Read(id string) (Note, error) {
+func (s *Store) Read(ctx context.Context, id string) (Note, error) {
+	if err := ctx.Err(); err != nil {
+		return Note{}, err
+	}
 	path, rel, err := s.Resolve(id)
 	if err != nil {
 		return Note{}, err
@@ -168,7 +213,10 @@ func (s *Store) Read(id string) (Note, error) {
 	}
 	return Note{ID: rel, Path: path, Title: Title(b, rel), Category: cat, Tags: Tags(b), ModifiedAt: fi.ModTime(), Content: b}, nil
 }
-func (s *Store) List() ([]Note, error) {
+func (s *Store) List(ctx context.Context) ([]Note, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	items := []Note{}
 	_, err := os.Stat(s.Repo)
 	if errors.Is(err, os.ErrNotExist) {
@@ -180,6 +228,9 @@ func (s *Store) List() ([]Note, error) {
 	err = filepath.WalkDir(s.Repo, func(path string, d fs.DirEntry, e error) error {
 		if e != nil {
 			return e
+		}
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 		if path == s.Repo {
 			return nil
@@ -196,7 +247,7 @@ func (s *Store) List() ([]Note, error) {
 		if d.IsDir() || strings.ToLower(filepath.Ext(d.Name())) != ".md" {
 			return nil
 		}
-		n, e := s.Read(path)
+		n, e := s.Read(ctx, path)
 		if e != nil {
 			return e
 		}
@@ -289,7 +340,10 @@ type NewOptions struct {
 	Now                             time.Time
 }
 
-func (s *Store) Create(o NewOptions) (Note, error) {
+func (s *Store) Create(ctx context.Context, o NewOptions) (Note, error) {
+	if err := ctx.Err(); err != nil {
+		return Note{}, err
+	}
 	if strings.TrimSpace(o.Title) == "" {
 		return Note{}, fmt.Errorf("title is required")
 	}
@@ -345,7 +399,7 @@ func (s *Store) Create(o NewOptions) (Note, error) {
 	if path == "" {
 		path = filepath.ToSlash(filepath.Join(o.Category, o.Now.Format("20060102-150405")+"-"+Slug(o.Title)+".md"))
 	}
-	release, err := s.lock()
+	release, err := s.lock(ctx)
 	if err != nil {
 		return Note{}, err
 	}
@@ -381,7 +435,7 @@ func (s *Store) Create(o NewOptions) (Note, error) {
 		_ = os.Remove(abs)
 		return Note{}, err
 	}
-	return s.Read(abs)
+	return s.Read(context.WithoutCancel(ctx), abs)
 }
 func atomicReplace(path string, b []byte, mode fs.FileMode, expected [32]byte) error {
 	f, err := os.CreateTemp(filepath.Dir(path), ".notes-write-*")
@@ -407,15 +461,15 @@ func atomicReplace(path string, b []byte, mode fs.FileMode, expected [32]byte) e
 		return err
 	}
 	if sha256.Sum256(current) != expected {
-		return fmt.Errorf("note changed on disk during save; local changes were not written")
+		return changedError("note changed on disk during save; local changes were not written")
 	}
 	return os.Rename(f.Name(), path)
 }
-func (s *Store) Save(id string, expected [32]byte, content []byte) error {
+func (s *Store) Save(ctx context.Context, id string, expected [32]byte, content []byte) error {
 	if !utf8.Valid(content) {
 		return fmt.Errorf("note is not UTF-8")
 	}
-	release, err := s.lock()
+	release, err := s.lock(ctx)
 	if err != nil {
 		return err
 	}
@@ -429,7 +483,7 @@ func (s *Store) Save(id string, expected [32]byte, content []byte) error {
 		return err
 	}
 	if sha256.Sum256(old) != expected {
-		return fmt.Errorf("note changed on disk; save a new copy or reload before retrying")
+		return changedError("note changed on disk; save a new copy or reload before retrying")
 	}
 	if bytes.Equal(old, content) {
 		return nil
@@ -440,8 +494,8 @@ func (s *Store) Save(id string, expected [32]byte, content []byte) error {
 	}
 	return atomicReplace(path, content, fi.Mode(), expected)
 }
-func (s *Store) Mutate(id string, fn func([]byte) ([]byte, error)) error {
-	n, err := s.Read(id)
+func (s *Store) Mutate(ctx context.Context, id string, fn func([]byte) ([]byte, error)) error {
+	n, err := s.Read(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -449,20 +503,20 @@ func (s *Store) Mutate(id string, fn func([]byte) ([]byte, error)) error {
 	if err != nil {
 		return err
 	}
-	if string(b) == string(n.Content) {
+	if bytes.Equal(b, n.Content) {
 		return nil
 	}
-	return s.Save(id, sha256.Sum256(n.Content), b)
+	return s.Save(ctx, id, n.Revision(), b)
 }
-func (s *Store) Delete(id string) error {
-	n, err := s.Read(id)
+func (s *Store) Delete(ctx context.Context, id string) error {
+	n, err := s.Read(ctx, id)
 	if err != nil {
 		return err
 	}
-	return s.DeleteIfUnchanged(id, sha256.Sum256(n.Content))
+	return s.DeleteIfUnchanged(ctx, id, n.Revision())
 }
-func (s *Store) DeleteIfUnchanged(id string, expected [32]byte) error {
-	release, err := s.lock()
+func (s *Store) DeleteIfUnchanged(ctx context.Context, id string, expected [32]byte) error {
+	release, err := s.lock(ctx)
 	if err != nil {
 		return err
 	}
@@ -476,15 +530,15 @@ func (s *Store) DeleteIfUnchanged(id string, expected [32]byte) error {
 		return err
 	}
 	if sha256.Sum256(content) != expected {
-		return fmt.Errorf("note changed on disk; review it before deleting")
+		return changedError("note changed on disk; review it before deleting")
 	}
 	return os.Remove(p)
 }
-func (s *Store) Move(src, dst string) (Note, error) {
+func (s *Store) Move(ctx context.Context, src, dst string) (Note, error) {
 	if hasControl(dst) {
 		return Note{}, fmt.Errorf("destination path contains control characters")
 	}
-	release, err := s.lock()
+	release, err := s.lock(ctx)
 	if err != nil {
 		return Note{}, err
 	}
@@ -513,5 +567,5 @@ func (s *Store) Move(src, dst string) (Note, error) {
 		_ = os.Remove(b)
 		return Note{}, err
 	}
-	return s.Read(b)
+	return s.Read(context.WithoutCancel(ctx), b)
 }

@@ -87,7 +87,7 @@ func absExpand(s, base string) string {
 }
 func Defaults(path string) Config {
 	return Config{
-		Repo: filepath.Join(filepath.Dir(DefaultPath()), "repo"), Editor: []string{}, DefaultCategory: "misc", Theme: "catppuccin-mocha", Color: "auto",
+		Repo: filepath.Join(filepath.Dir(DefaultPath()), "repo"), Editor: []string{}, DefaultCategory: "misc", Theme: theme.Default, Color: "auto",
 		Journal: Journal{Timezone: "local"}, Git: Git{AutoSync: true, MaxInterval: "5m", Timeout: "30s"},
 		TUI: TUI{AutosaveDelay: "1s", EditorMode: "ask"}, Update: Update{Repository: "naterator/notes"},
 		Path: path, StateDir: DefaultStateDir(),

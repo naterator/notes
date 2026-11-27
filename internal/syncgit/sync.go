@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/naterator/notes/internal/store"
+	store "github.com/naterator/notes"
 )
 
 type Client struct {
@@ -35,7 +35,7 @@ var ErrConflict = errors.New("Git conflict requires manual resolution")
 
 // EnsureRepo initializes the dedicated notes repository on first use.
 func (g Client) EnsureRepo(ctx context.Context) error {
-	release, err := g.Store.Lock()
+	release, err := g.Store.Lock(ctx)
 	if err != nil {
 		return err
 	}
@@ -322,7 +322,7 @@ func (g Client) DueIn(ctx context.Context, max time.Duration) (time.Duration, er
 	return max - age, nil
 }
 func (g Client) Sync(ctx context.Context, message string, background bool) error {
-	release, err := g.Store.Lock()
+	release, err := g.Store.Lock(ctx)
 	if err != nil {
 		return err
 	}

@@ -1,7 +1,8 @@
-package store
+package notes
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -71,21 +72,26 @@ func JournalDate(date, tz string, now time.Time) (string, time.Time, error) {
 	}
 	return date, local, nil
 }
+
+// JournalID returns the path for a date validated by JournalDate, or empty for an invalid date.
 func JournalID(date string) string {
+	if parsed, err := time.Parse("2006-01-02", date); err != nil || parsed.Format("2006-01-02") != date {
+		return ""
+	}
 	return filepath.ToSlash(filepath.Join("journal", date[:4], date[5:7], date+".md"))
 }
-func (s *Store) EnsureJournal(date, tz string, now time.Time) (Note, error) {
+func (s *Store) EnsureJournal(ctx context.Context, date, tz string, now time.Time) (Note, error) {
 	date, _, err := JournalDate(date, tz, now)
 	if err != nil {
 		return Note{}, err
 	}
 	id := JournalID(date)
-	if note, err := s.Read(id); err == nil {
+	if note, err := s.Read(ctx, id); err == nil {
 		return note, nil
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return Note{}, err
 	}
-	release, err := s.lock()
+	release, err := s.lock(ctx)
 	if err != nil {
 		return Note{}, err
 	}
@@ -99,7 +105,7 @@ func (s *Store) EnsureJournal(date, tz string, now time.Time) (Note, error) {
 	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if errors.Is(err, os.ErrExist) {
-		return s.Read(id)
+		return s.Read(ctx, id)
 	}
 	if err != nil {
 		return Note{}, err
@@ -114,9 +120,9 @@ func (s *Store) EnsureJournal(date, tz string, now time.Time) (Note, error) {
 		_ = os.Remove(path)
 		return Note{}, err
 	}
-	return s.Read(id)
+	return s.Read(context.WithoutCancel(ctx), id)
 }
-func (s *Store) AddJournal(date, tz, section, body string, tags []string, now time.Time) (Note, error) {
+func (s *Store) AddJournal(ctx context.Context, date, tz, section, body string, tags []string, now time.Time) (Note, error) {
 	if !utf8.ValidString(body) || strings.TrimSpace(body) == "" {
 		return Note{}, fmt.Errorf("journal entry is empty or invalid UTF-8")
 	}
@@ -130,7 +136,7 @@ func (s *Store) AddJournal(date, tz, section, body string, tags []string, now ti
 	if err != nil {
 		return Note{}, err
 	}
-	note, err := s.EnsureJournal(date, tz, now)
+	note, err := s.EnsureJournal(ctx, date, tz, now)
 	if err != nil {
 		return Note{}, err
 	}
@@ -143,7 +149,7 @@ func (s *Store) AddJournal(date, tz, section, body string, tags []string, now ti
 		lines[i] = strings.TrimRight(lines[i], "\r")
 	}
 	heading := "## " + strings.ToUpper(section[:1]) + section[1:]
-	err = s.Mutate(note.ID, func(b []byte) ([]byte, error) {
+	err = s.Mutate(ctx, note.ID, func(b []byte) ([]byte, error) {
 		newline := journalNewline(b)
 		var entry strings.Builder
 		entry.Grow(len(body) + len(tagList)*24 + 32)
@@ -193,5 +199,5 @@ func (s *Store) AddJournal(date, tz, section, body string, tags []string, now ti
 	if err != nil {
 		return Note{}, err
 	}
-	return s.Read(note.ID)
+	return s.Read(context.WithoutCancel(ctx), note.ID)
 }

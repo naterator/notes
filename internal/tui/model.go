@@ -11,10 +11,12 @@ import (
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	store "github.com/naterator/notes"
 	"github.com/naterator/notes/internal/config"
-	"github.com/naterator/notes/internal/store"
 	"github.com/naterator/notes/internal/syncgit"
 )
+
+const maxEditable = 2 << 20
 
 type tickMsg time.Time
 type syncMsg struct {
@@ -154,8 +156,8 @@ type Model struct {
 	HelpOffset                 int
 }
 
-func NewModel(c config.Config, s *store.Store, start string) (*Model, error) {
-	notes, e := s.List()
+func NewModel(ctx context.Context, c config.Config, s *store.Store, start string) (*Model, error) {
+	notes, e := s.List(ctx)
 	if e != nil {
 		return nil, e
 	}
@@ -166,7 +168,7 @@ func NewModel(c config.Config, s *store.Store, start string) (*Model, error) {
 	p := textinput.New()
 	p.SetWidth(60)
 	timeout, _ := time.ParseDuration(c.Git.Timeout)
-	m := &Model{Context: context.Background(), Config: c, Store: s, Sync: syncgit.Client{Store: s, Timeout: timeout}, Width: 100, Height: 30, Focus: "search", SearchMode: "INPUT", Flavor: c.TUI.EditorMode, Query: q, Prompt: p, Notes: notes, Expanded: map[string]bool{"all": true}}
+	m := &Model{Context: ctx, Config: c, Store: s, Sync: syncgit.Client{Store: s, Timeout: timeout}, Width: 100, Height: 30, Focus: "search", SearchMode: "INPUT", Flavor: c.TUI.EditorMode, Query: q, Prompt: p, Notes: notes, Expanded: map[string]bool{"all": true}}
 	if c.TUI.EditorMode == "ask" {
 		m.Overlay = "choose"
 		m.Flavor = "vim"
@@ -190,33 +192,11 @@ func noteInTag(n store.Note, tag string) bool {
 	case "untagged":
 		return len(n.Tags) == 0
 	default:
-		for _, own := range n.Tags {
-			if own == tag || strings.HasPrefix(own, tag+"/") {
-				return true
-			}
-		}
-		return false
+		return n.HasTagPrefix(tag)
 	}
 }
 func buildRows(notes []store.Note, query, selectedTag string, expanded map[string]bool) []treeRow {
-	counts := map[string]int{}
-	untagged := 0
-	for _, n := range notes {
-		if len(n.Tags) == 0 {
-			untagged++
-		}
-		seen := map[string]bool{}
-		for _, tag := range n.Tags {
-			parts := strings.Split(tag, "/")
-			for i := 1; i <= len(parts); i++ {
-				parent := strings.Join(parts[:i], "/")
-				if !seen[parent] {
-					counts[parent]++
-					seen[parent] = true
-				}
-			}
-		}
-	}
+	counts, untagged := store.TagTree(notes)
 	keys := make([]string, 0, len(counts))
 	for tag := range counts {
 		keys = append(keys, tag)
@@ -313,7 +293,7 @@ func (m *Model) scheduleSearch() tea.Cmd {
 	})
 }
 func (m *Model) refresh() error {
-	notes, e := m.Store.List()
+	notes, e := m.Store.List(m.Context)
 	if e != nil {
 		return e
 	}
@@ -327,18 +307,18 @@ func (m *Model) open(id string) error {
 			return e
 		}
 	}
-	n, e := m.Store.Read(id)
+	n, e := m.Store.Read(m.Context, id)
 	if e != nil {
 		return e
 	}
-	if len(n.Content) > store.MaxEditable {
+	if len(n.Content) > maxEditable {
 		return fmt.Errorf("note exceeds 2 MiB editor limit; use notes edit")
 	}
 	m.Active = &n
 	m.Editor = ptrEditor(NewEditor(m.Flavor, string(n.Content)))
 	m.sizeEditor()
 	m.focus(m.Focus)
-	m.Saved = sha256.Sum256(n.Content)
+	m.Saved = n.Revision()
 	m.Dirty = false
 	m.Message = "Opened " + n.ID
 	return nil
@@ -358,14 +338,14 @@ func (m *Model) save() error {
 		return nil
 	}
 	b := []byte(m.Editor.Value())
-	if len(b) > store.MaxEditable {
+	if len(b) > maxEditable {
 		return fmt.Errorf("note exceeds 2 MiB editor limit")
 	}
 	if sha256.Sum256(b) == m.Saved {
 		m.Dirty = false
 		return nil
 	}
-	if e := m.Store.Save(m.Active.ID, m.Saved, b); e != nil {
+	if e := m.Store.Save(m.Context, m.Active.ID, m.Saved, b); e != nil {
 		m.setOverlay("conflict")
 		m.Message = e.Error()
 		return e
@@ -373,7 +353,7 @@ func (m *Model) save() error {
 	warning := m.markChanged(m.Active.ID)
 	m.Saved = sha256.Sum256(b)
 	m.Dirty = false
-	n, e := m.Store.Read(m.Active.ID)
+	n, e := m.Store.Read(m.Context, m.Active.ID)
 	if e != nil {
 		return e
 	}
@@ -444,7 +424,7 @@ func (m *Model) saveCopy() error {
 	if m.Editor == nil || m.Active == nil {
 		return nil
 	}
-	path, e := m.Store.SaveRecovery(m.Active.ID, []byte(m.Editor.Value()))
+	path, e := m.Store.SaveRecovery(m.Context, m.Active.ID, []byte(m.Editor.Value()))
 	if e != nil {
 		return e
 	}
@@ -671,8 +651,8 @@ func (m *Model) action(a string) tea.Cmd {
 			m.Message = e.Error()
 			return nil
 		}
-		_, oldErr := m.Store.Read(store.JournalID(day))
-		n, e := m.Store.EnsureJournal("", m.Config.Journal.Timezone, now)
+		_, oldErr := m.Store.Read(m.Context, store.JournalID(day))
+		n, e := m.Store.EnsureJournal(m.Context, "", m.Config.Journal.Timezone, now)
 		if e != nil {
 			m.Message = e.Error()
 		} else {

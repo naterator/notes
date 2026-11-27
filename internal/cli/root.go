@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/google/shlex"
+	store "github.com/naterator/notes"
 	"github.com/naterator/notes/internal/config"
-	"github.com/naterator/notes/internal/store"
 	"github.com/naterator/notes/internal/syncgit"
 	"github.com/naterator/notes/internal/theme"
 	"github.com/spf13/cobra"
@@ -78,7 +78,7 @@ func New(in io.Reader, out, errOut io.Writer) *App {
 	r.PersistentFlags().StringVar(&a.Color, "color", "", "auto, always, or never")
 	r.PersistentFlags().BoolVar(&a.NoColor, "no-color", false, "disable ANSI color")
 	_ = r.RegisterFlagCompletionFunc("theme", func(cmd *cobra.Command, args []string, prefix string) ([]string, cobra.ShellCompDirective) {
-		return theme.Names(), cobra.ShellCompDirectiveNoFileComp
+		return theme.AcceptedNames(), cobra.ShellCompDirectiveNoFileComp
 	})
 	_ = r.RegisterFlagCompletionFunc("color", func(cmd *cobra.Command, args []string, prefix string) ([]string, cobra.ShellCompDirective) {
 		return []string{"auto", "always", "never"}, cobra.ShellCompDirectiveNoFileComp
@@ -191,13 +191,13 @@ func (a *App) config() (config.Config, error) {
 	}
 	return c, nil
 }
-func (a *App) store() (config.Config, *store.Store, error) {
+func (a *App) store(ctx context.Context) (config.Config, *store.Store, error) {
 	c, e := a.config()
 	if e != nil {
 		return c, nil, e
 	}
 	s := store.New(c.Repo, c.StateDir)
-	if e := (syncgit.Client{Store: s}).EnsureRepo(context.Background()); e != nil {
+	if e := (syncgit.Client{Store: s}).EnsureRepo(ctx); e != nil {
 		return c, nil, e
 	}
 	return c, s, nil

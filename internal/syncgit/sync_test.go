@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/naterator/notes/internal/store"
+	store "github.com/naterator/notes"
 )
 
 func git(t *testing.T, args ...string) string {
@@ -44,7 +44,7 @@ func TestSyncTwoClonesAndOfflineCheckpoint(t *testing.T) {
 	git(t, "init", "--bare", "-b", "main", remote)
 	a := clone(t, base, remote, "a")
 	ctx := context.Background()
-	if _, e := a.Store.Create(store.NewOptions{Title: "one", Path: "one.md"}); e != nil {
+	if _, e := a.Store.Create(t.Context(), store.NewOptions{Title: "one", Path: "one.md"}); e != nil {
 		t.Fatal(e)
 	}
 	if e := a.Sync(ctx, "", false); e != nil {
@@ -54,7 +54,7 @@ func TestSyncTwoClonesAndOfflineCheckpoint(t *testing.T) {
 		t.Fatalf("successful sync state: %+v, %v", status, e)
 	}
 	b := clone(t, base, remote, "b")
-	if _, e := b.Store.Create(store.NewOptions{Title: "two", Path: "two.md"}); e != nil {
+	if _, e := b.Store.Create(t.Context(), store.NewOptions{Title: "two", Path: "two.md"}); e != nil {
 		t.Fatal(e)
 	}
 	if e := b.Sync(ctx, "", false); e != nil {
@@ -72,7 +72,7 @@ func TestSyncTwoClonesAndOfflineCheckpoint(t *testing.T) {
 	if _, e := os.Stat(filepath.Join(a.Store.Repo, "two.md")); e != nil {
 		t.Fatal(e)
 	}
-	if _, e := a.Store.Create(store.NewOptions{Title: "offline", Path: "offline.md"}); e != nil {
+	if _, e := a.Store.Create(t.Context(), store.NewOptions{Title: "offline", Path: "offline.md"}); e != nil {
 		t.Fatal(e)
 	}
 	git(t, "-C", a.Store.Repo, "remote", "set-url", "origin", filepath.Join(base, "missing.git"))
@@ -97,7 +97,7 @@ func TestSyncTwoClonesAndOfflineCheckpoint(t *testing.T) {
 	if got := git(t, "-C", a.Store.Repo, "rev-parse", "HEAD"); got != head {
 		t.Fatalf("clean sync created a commit: %s -> %s", head, got)
 	}
-	if e := a.Store.Delete("offline.md"); e != nil {
+	if e := a.Store.Delete(t.Context(), "offline.md"); e != nil {
 		t.Fatal(e)
 	}
 	if e := a.Sync(ctx, "", false); e != nil {
@@ -114,7 +114,7 @@ func TestInitialOfflineCheckpointRemainsDue(t *testing.T) {
 	remote := filepath.Join(base, "remote.git")
 	git(t, "init", "--bare", "-b", "main", remote)
 	c := clone(t, base, remote, "a")
-	if _, e := c.Store.Create(store.NewOptions{Title: "first", Path: "first.md"}); e != nil {
+	if _, e := c.Store.Create(t.Context(), store.NewOptions{Title: "first", Path: "first.md"}); e != nil {
 		t.Fatal(e)
 	}
 	git(t, "-C", c.Store.Repo, "remote", "set-url", "origin", filepath.Join(base, "missing.git"))
@@ -140,7 +140,7 @@ func TestSyncRequiresDedicatedRepoOriginAndIdentity(t *testing.T) {
 	git(t, "init", "-b", "main", parent)
 	repo := filepath.Join(parent, "notes")
 	c := Client{Store: store.New(repo, filepath.Join(base, "state")), Timeout: 5 * time.Second}
-	if _, err := c.Store.Create(store.NewOptions{Title: "first", Path: "first.md"}); err != nil {
+	if _, err := c.Store.Create(t.Context(), store.NewOptions{Title: "first", Path: "first.md"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := c.Sync(context.Background(), "", false); err == nil || !strings.Contains(err.Error(), "differs from configured notes repo") {
@@ -171,7 +171,7 @@ func TestEditDuringPushRemainsPending(t *testing.T) {
 	remote := filepath.Join(base, "remote.git")
 	git(t, "init", "--bare", "-b", "main", remote)
 	c := clone(t, base, remote, "a")
-	if _, e := c.Store.Create(store.NewOptions{Title: "first", Path: "first.md"}); e != nil {
+	if _, e := c.Store.Create(t.Context(), store.NewOptions{Title: "first", Path: "first.md"}); e != nil {
 		t.Fatal(e)
 	}
 	hook := filepath.Join(c.Store.Repo, ".git", "hooks", "pre-push")
@@ -196,7 +196,7 @@ func TestConflictingPullPreservesLocalCommit(t *testing.T) {
 	git(t, "init", "--bare", "-b", "main", remote)
 	a := clone(t, base, remote, "a")
 	ctx := context.Background()
-	if _, e := a.Store.Create(store.NewOptions{Title: "original", Path: "shared.md"}); e != nil {
+	if _, e := a.Store.Create(t.Context(), store.NewOptions{Title: "original", Path: "shared.md"}); e != nil {
 		t.Fatal(e)
 	}
 	if e := a.Sync(ctx, "", false); e != nil {
@@ -229,17 +229,17 @@ func TestDivergentNonconflictingNotesMergeAndPush(t *testing.T) {
 	git(t, "init", "--bare", "-b", "main", remote)
 	a := clone(t, base, remote, "a")
 	ctx := context.Background()
-	if _, err := a.Store.Create(store.NewOptions{Title: "base", Path: "base.md"}); err != nil {
+	if _, err := a.Store.Create(t.Context(), store.NewOptions{Title: "base", Path: "base.md"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := a.Sync(ctx, "", false); err != nil {
 		t.Fatal(err)
 	}
 	b := clone(t, base, remote, "b")
-	if _, err := a.Store.Create(store.NewOptions{Title: "local", Path: "local.md"}); err != nil {
+	if _, err := a.Store.Create(t.Context(), store.NewOptions{Title: "local", Path: "local.md"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := b.Store.Create(store.NewOptions{Title: "remote", Path: "remote.md"}); err != nil {
+	if _, err := b.Store.Create(t.Context(), store.NewOptions{Title: "remote", Path: "remote.md"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := b.Sync(ctx, "", false); err != nil {
@@ -263,7 +263,7 @@ func TestSyncRefusesStagedAndNonNoteChanges(t *testing.T) {
 	remote := filepath.Join(base, "remote.git")
 	git(t, "init", "--bare", "-b", "main", remote)
 	c := clone(t, base, remote, "a")
-	if _, e := c.Store.Create(store.NewOptions{Title: "first", Path: "first.md"}); e != nil {
+	if _, e := c.Store.Create(t.Context(), store.NewOptions{Title: "first", Path: "first.md"}); e != nil {
 		t.Fatal(e)
 	}
 	git(t, "-C", c.Store.Repo, "add", "first.md")
@@ -319,7 +319,7 @@ func TestSyncUsesOriginUpstreamBranch(t *testing.T) {
 	remote := filepath.Join(base, "remote.git")
 	git(t, "init", "--bare", "-b", "main", remote)
 	c := clone(t, base, remote, "a")
-	if _, e := c.Store.Create(store.NewOptions{Title: "first", Path: "first.md"}); e != nil {
+	if _, e := c.Store.Create(t.Context(), store.NewOptions{Title: "first", Path: "first.md"}); e != nil {
 		t.Fatal(e)
 	}
 	if e := c.Sync(context.Background(), "", false); e != nil {
@@ -329,7 +329,7 @@ func TestSyncUsesOriginUpstreamBranch(t *testing.T) {
 	if got := c.remoteBranch(context.Background(), "local"); got != "main" {
 		t.Fatalf("remote branch: %q", got)
 	}
-	if _, e := c.Store.Create(store.NewOptions{Title: "second", Path: "second.md"}); e != nil {
+	if _, e := c.Store.Create(t.Context(), store.NewOptions{Title: "second", Path: "second.md"}); e != nil {
 		t.Fatal(e)
 	}
 	if e := c.Sync(context.Background(), "", false); e != nil {
@@ -346,7 +346,7 @@ func TestSyncStagesLiteralNotePathsAndRejectsHiddenFiles(t *testing.T) {
 	git(t, "init", "--bare", "-b", "main", remote)
 	c := clone(t, base, remote, "a")
 	name := ":(exclude)literal.md"
-	if _, err := c.Store.Create(store.NewOptions{Title: "literal", Path: name}); err != nil {
+	if _, err := c.Store.Create(t.Context(), store.NewOptions{Title: "literal", Path: name}); err != nil {
 		t.Fatal(err)
 	}
 	if err := c.Sync(context.Background(), "", false); err != nil {
@@ -399,7 +399,7 @@ func TestDueUsesCommitAgeAndPendingChanges(t *testing.T) {
 	git(t, "init", "--bare", "-b", "main", remote)
 	c := clone(t, base, remote, "a")
 	ctx := context.Background()
-	if _, e := c.Store.Create(store.NewOptions{Title: "first", Path: "first.md"}); e != nil {
+	if _, e := c.Store.Create(t.Context(), store.NewOptions{Title: "first", Path: "first.md"}); e != nil {
 		t.Fatal(e)
 	}
 	if e := c.Sync(ctx, "", false); e != nil {
@@ -407,7 +407,7 @@ func TestDueUsesCommitAgeAndPendingChanges(t *testing.T) {
 	}
 	baseNow := time.Now()
 	c.Now = func() time.Time { return baseNow.Add(time.Minute) }
-	if _, e := c.Store.Create(store.NewOptions{Title: "second", Path: "second.md"}); e != nil {
+	if _, e := c.Store.Create(t.Context(), store.NewOptions{Title: "second", Path: "second.md"}); e != nil {
 		t.Fatal(e)
 	}
 	if due, e := c.Due(ctx, 5*time.Minute); e != nil || due {

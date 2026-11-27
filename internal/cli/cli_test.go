@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/naterator/notes/internal/config"
-	"github.com/naterator/notes/internal/store"
 )
 
 func run(t *testing.T, in string, args ...string) (string, error) {
@@ -195,6 +194,7 @@ func TestCLIFilePipeline(t *testing.T) {
 	}
 }
 func TestPipedNotesCanExceedTUIEditorLimit(t *testing.T) {
+	const tuiLimit = 2 << 20
 	base := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", filepath.Join(base, "state"))
 	configPath := filepath.Join(base, "config.toml")
@@ -203,7 +203,7 @@ func TestPipedNotesCanExceedTUIEditorLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	args := []string{"--config", configPath, "--repo", repo}
-	large := strings.Repeat(strings.Repeat("a", 1023)+"\n", store.MaxEditable/1024+1)
+	large := strings.Repeat(strings.Repeat("a", 1023)+"\n", tuiLimit/1024+1)
 	noteBody := large + "unique-large-note-marker\n"
 	if out, err := run(t, noteBody, append(args, "new", "Large", "--path", "large.md", "--stdin")...); err != nil || strings.TrimSpace(out) != filepath.Join(repo, "large.md") {
 		t.Fatalf("new with large stdin: %q, %v", out, err)
@@ -218,7 +218,7 @@ func TestPipedNotesCanExceedTUIEditorLimit(t *testing.T) {
 	if out, err := run(t, journalBody, append(args, "journal", "add", "--date", "2026-09-28", "--section", "actions", "--stdin")...); err != nil || strings.TrimSpace(out) != filepath.Join(repo, "journal", "2026", "09", "2026-09-28.md") {
 		t.Fatalf("journal with large stdin: %q, %v", out, err)
 	}
-	if out, err := run(t, "", append(args, "show", "journal/2026/09/2026-09-28.md")...); err != nil || !strings.Contains(out, "  unique-large-journal-marker\n") || len(out) <= store.MaxEditable {
+	if out, err := run(t, "", append(args, "show", "journal/2026/09/2026-09-28.md")...); err != nil || !strings.Contains(out, "  unique-large-journal-marker\n") || len(out) <= tuiLimit {
 		t.Fatalf("large journal changed: length %d, %v", len(out), err)
 	}
 }

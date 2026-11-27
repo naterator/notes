@@ -211,8 +211,14 @@ func (m *Model) beginSetting(key string) {
 		s.Filter.Placeholder = "Search choices"
 		s.Filter.Focus()
 		s.Input.Blur()
+		selected := s.Initial
+		if key == "theme" {
+			if scheme, ok := theme.Lookup(selected); ok {
+				selected = scheme.ID
+			}
+		}
 		for i, row := range s.rows() {
-			if row.Key == s.Initial {
+			if row.Key == selected {
 				s.Selected = i
 			}
 		}

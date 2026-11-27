@@ -190,7 +190,6 @@ func TestVimChangeLineAndRepeatChange(t *testing.T) {
 	e.Handle(key('o', "o"))
 	e.Handle(key('n', "n"))
 	e.Handle(key('e', "e"))
-	e.Handle(key(' ', " "))
 	e.Escape()
 	if e.Value() != "one beta gamma" {
 		t.Fatalf("cw: %q", e.Value())

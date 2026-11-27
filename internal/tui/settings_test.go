@@ -109,7 +109,7 @@ func TestThemePreviewCancelConfirmAndOverride(t *testing.T) {
 	settingsCmd(t, m, m.openSettings(true))
 	before, _ := os.ReadFile(m.Config.Path)
 	settingsSelect(m, "nord")
-	if m.schemeName() != "nord" || m.Config.Theme != "catppuccin-mocha" {
+	if m.schemeName() != "nord" || m.Config.Theme != "default" {
 		t.Fatal("preview changed runtime config")
 	}
 	after, _ := os.ReadFile(m.Config.Path)
@@ -123,7 +123,7 @@ func TestThemePreviewCancelConfirmAndOverride(t *testing.T) {
 		t.Fatal("help lost preview")
 	}
 	press(m, tea.KeyEsc, "", 0)
-	if m.schemeName() != "catppuccin-mocha" || m.Settings != nil {
+	if m.schemeName() != "default" || m.Settings != nil {
 		t.Fatal("cancel failed to restore palette")
 	}
 	if err := m.Config.OverrideFrom("theme", "nord", "flag --theme"); err != nil {
@@ -228,7 +228,7 @@ func TestSettingsValidationConflictsAndMalformedFile(t *testing.T) {
 	m.beginSetting("theme")
 	settingsSelect(m, "nord")
 	settingsPress(t, m, tea.KeyEnter, "", 0)
-	if m.Config.Theme != "catppuccin-mocha" || !strings.Contains(m.Settings.Error, "Not saved") {
+	if m.Config.Theme != "default" || !strings.Contains(m.Settings.Error, "Not saved") {
 		t.Fatal("bad file changed runtime")
 	}
 	press(m, tea.KeyEsc, "", 0)
@@ -445,11 +445,11 @@ func TestSettingsWriteFailureRetainsDraftAndRuntime(t *testing.T) {
 	defer os.Chmod(dir, 0700)
 	settingsPress(t, m, tea.KeyEnter, "", 0)
 	after, _ := os.ReadFile(m.Config.Path)
-	if string(before) != string(after) || m.Config.Theme != "catppuccin-mocha" || m.Settings.Preview != "nord" || !strings.Contains(m.Settings.Error, "Not saved") {
+	if string(before) != string(after) || m.Config.Theme != "default" || m.Settings.Preview != "nord" || !strings.Contains(m.Settings.Error, "Not saved") {
 		t.Fatal("write failure discarded state or changed configuration")
 	}
 	press(m, tea.KeyEsc, "", 0)
-	if m.schemeName() != "catppuccin-mocha" {
+	if m.schemeName() != "default" {
 		t.Fatal("cancel after failure retained preview")
 	}
 }

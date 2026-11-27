@@ -33,7 +33,7 @@ jobs:
           go-version-file: go.mod
       - name: Format, vet, and native tests
         run: |
-          test -z "$(gofmt -l cmd internal)"
+          test -z "$(gofmt -l *.go cmd internal)"
           go vet ./...
           go test -race ./...
       - name: Native binary and terminal smoke

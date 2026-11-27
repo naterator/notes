@@ -24,8 +24,8 @@ func contrast(a, b string) float64 {
 	return (math.Max(x, y) + 0.05) / (math.Min(x, y) + 0.05)
 }
 func TestPaletteReadability(t *testing.T) {
-	if len(List()) != 18 {
-		t.Fatal("expected eighteen schemes")
+	if len(List()) != 36 {
+		t.Fatal("expected seventeen qbitctl schemes, eighteen Notes schemes, and History")
 	}
 	seen := map[string]bool{}
 	for _, s := range List() {

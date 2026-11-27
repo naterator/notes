@@ -17,14 +17,14 @@ func (m *Model) schemeName() string {
 }
 func (m *Model) palette() theme.Palette { return theme.Get(m.schemeName()) }
 func (m *Model) colored() bool          { return theme.Enabled(m.Config.Color, true) }
-func (m *Model) fixedColor() bool       { return m.colored() && m.schemeName() != "terminal" }
+func (m *Model) fixedColor() bool       { return m.colored() && m.schemeName() != "terminal-native" }
 
 // Dark palettes use their lighter surface for the editor canvas. Light
 // palettes keep their light base. Search/sidebar cards use the darker shade.
 func (m *Model) canvasBackground() string {
 	p := m.palette()
 	s, _ := theme.Lookup(m.schemeName())
-	if s.Kind == "light" {
+	if p.Field != "" || s.Kind == "light" {
 		return p.Base
 	}
 	return p.Surface
@@ -32,11 +32,18 @@ func (m *Model) canvasBackground() string {
 func (m *Model) panelBackground() string {
 	p := m.palette()
 	s, _ := theme.Lookup(m.schemeName())
-	if s.Kind == "light" {
+	if p.Field != "" || s.Kind == "light" {
 		return p.Surface
 	}
 	return p.Base
 }
+func (m *Model) fieldBackground() string {
+	if field := m.palette().Field; field != "" {
+		return field
+	}
+	return m.panelBackground()
+}
+
 func (m *Model) textStyle(fg, bg string) lipgloss.Style {
 	s := lipgloss.NewStyle()
 	if m.fixedColor() {
@@ -51,7 +58,7 @@ func (m *Model) textStyle(fg, bg string) lipgloss.Style {
 }
 func (m *Model) selectedStyle() lipgloss.Style {
 	p := m.palette()
-	if m.schemeName() == "terminal" && m.colored() {
+	if m.schemeName() == "terminal-native" && m.colored() {
 		return lipgloss.NewStyle().Reverse(true)
 	}
 	return m.textStyle(p.SelectionText, p.Selection)
@@ -71,7 +78,7 @@ func (m *Model) styleInput(input *textinput.Model, background string) {
 func (m *Model) refreshStyles() {
 	p := m.palette()
 	canvas, panel := m.canvasBackground(), m.panelBackground()
-	m.styleInput(&m.Query, panel)
+	m.styleInput(&m.Query, m.fieldBackground())
 	m.styleInput(&m.Prompt, panel)
 	for i := range m.Fields {
 		m.styleInput(&m.Fields[i], panel)

@@ -3,7 +3,6 @@ package cli
 import (
 	"bufio"
 	"bytes"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,8 +14,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/x/term"
+	store "github.com/naterator/notes"
 	"github.com/naterator/notes/internal/config"
-	"github.com/naterator/notes/internal/store"
 	"github.com/naterator/notes/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -38,7 +37,7 @@ func (a *App) newCommand() {
 	var tags []string
 	var fromStdin bool
 	cmd := &cobra.Command{Use: "new TITLE", Short: "Create one Markdown note", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		c, s, e := a.store()
+		c, s, e := a.store(cmd.Context())
 		if e != nil {
 			return e
 		}
@@ -52,7 +51,7 @@ func (a *App) newCommand() {
 				return e
 			}
 		}
-		n, e := s.Create(store.NewOptions{Title: args[0], Category: category, Path: path, Template: template, Tags: tags, Stdin: body})
+		n, e := s.Create(cmd.Context(), store.NewOptions{Title: args[0], Category: category, Path: path, Template: template, Tags: tags, Stdin: body})
 		if e != nil {
 			return e
 		}
@@ -70,11 +69,11 @@ func (a *App) newCommand() {
 }
 func (a *App) showCommand() {
 	a.Root.AddCommand(&cobra.Command{Use: "show NOTE", Short: "Print exact Markdown source", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		_, s, e := a.store()
+		_, s, e := a.store(cmd.Context())
 		if e != nil {
 			return e
 		}
-		n, e := s.Read(args[0])
+		n, e := s.Read(cmd.Context(), args[0])
 		if e != nil {
 			return e
 		}
@@ -84,15 +83,14 @@ func (a *App) showCommand() {
 }
 
 type queryFlags struct {
-	Tags                                                        []string
-	Category, Sort                                              string
-	Reverse                                                     bool
-	Limit                                                       int
+	store.Query
 	Relative, Print0, JSON, Long, Matches, CaseSensitive, Regex bool
 }
 
 func addQueryFlags(cmd *cobra.Command, f *queryFlags, find bool) {
 	cmd.Flags().StringArrayVar(&f.Tags, "tag", nil, "require tag (repeatable)")
+	cmd.Flags().StringVar(&f.TagPrefix, "tag-prefix", "", "require a tag or any descendant of it")
+	cmd.Flags().BoolVar(&f.Untagged, "untagged", false, "show only notes without tags")
 	cmd.Flags().StringVar(&f.Category, "category", "", "category and descendants")
 	cmd.Flags().StringVar(&f.Sort, "sort", "path", "path, modified, title, or category")
 	cmd.Flags().BoolVar(&f.Reverse, "reverse", false, "reverse sort")
@@ -107,7 +105,10 @@ func addQueryFlags(cmd *cobra.Command, f *queryFlags, find bool) {
 		cmd.Flags().BoolVar(&f.Regex, "regex", false, "treat query as Go regexp")
 	}
 }
-func (f *queryFlags) validate(cmd *cobra.Command) error {
+func (f *queryFlags) validate() error {
+	if f.Untagged && (len(f.Tags) != 0 || f.TagPrefix != "") {
+		return usage("--untagged conflicts with --tag and --tag-prefix")
+	}
 	if f.Limit < 0 {
 		return usage("--limit cannot be negative")
 	}
@@ -133,62 +134,6 @@ func findMatcher(query string, regex, caseSensitive bool) (*regexp.Regexp, error
 		query = "(?i)" + query
 	}
 	return regexp.Compile(query)
-}
-func filtered(notes []store.Note, f queryFlags, query *regexp.Regexp) []store.Note {
-	out := make([]store.Note, 0, len(notes))
-	for _, n := range notes {
-		if f.Category != "" && n.Category != f.Category && !strings.HasPrefix(n.Category, f.Category+"/") {
-			continue
-		}
-		ok := true
-		for _, tag := range f.Tags {
-			tag = strings.ToLower(strings.TrimPrefix(tag, "#"))
-			seen := false
-			for _, t := range n.Tags {
-				if t == tag {
-					seen = true
-					break
-				}
-			}
-			if !seen {
-				ok = false
-				break
-			}
-		}
-		if !ok {
-			continue
-		}
-		if query != nil && !query.Match(n.Content) && !query.MatchString(n.Title) {
-			continue
-		}
-		out = append(out, n)
-	}
-	sort.SliceStable(out, func(i, j int) bool {
-		switch f.Sort {
-		case "modified":
-			if !out[i].ModifiedAt.Equal(out[j].ModifiedAt) {
-				return out[i].ModifiedAt.Before(out[j].ModifiedAt)
-			}
-		case "title":
-			if out[i].Title != out[j].Title {
-				return out[i].Title < out[j].Title
-			}
-		case "category":
-			if out[i].Category != out[j].Category {
-				return out[i].Category < out[j].Category
-			}
-		}
-		return out[i].ID < out[j].ID
-	})
-	if f.Reverse {
-		for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
-			out[i], out[j] = out[j], out[i]
-		}
-	}
-	if f.Limit > 0 && len(out) > f.Limit {
-		out = out[:f.Limit]
-	}
-	return out
 }
 func (a *App) outputNotes(c config.Config, notes []store.Note, f queryFlags, matcher *regexp.Regexp, compactList bool) error {
 	if f.JSON {
@@ -259,6 +204,7 @@ func (a *App) outputNotes(c config.Config, notes []store.Note, f queryFlags, mat
 }
 func (a *App) listCommand(find bool) {
 	f := &queryFlags{}
+	var note string
 	name := "list"
 	short := "List Markdown notes"
 	if find {
@@ -272,7 +218,7 @@ func (a *App) listCommand(find bool) {
 		if !find && len(args) != 0 {
 			return usage("list takes no arguments")
 		}
-		if e := f.validate(cmd); e != nil {
+		if e := f.validate(); e != nil {
 			return e
 		}
 		var matcher *regexp.Regexp
@@ -286,19 +232,31 @@ func (a *App) listCommand(find bool) {
 				return usage("invalid regex: %v", e)
 			}
 		}
-		c, s, e := a.store()
+		c, s, e := a.store(cmd.Context())
 		if e != nil {
 			return e
 		}
-		notes, e := s.List()
+		f.Matcher = matcher
+		var notes []store.Note
+		if note == "" {
+			notes, e = s.Query(cmd.Context(), f.Query)
+		} else {
+			n, err := s.Read(cmd.Context(), note)
+			if err != nil {
+				return err
+			}
+			notes, e = store.FilterNotes(cmd.Context(), []store.Note{n}, f.Query)
+		}
 		if e != nil {
 			return e
 		}
 		out, fileOutput := a.Out.(*os.File)
 		compactList := !find && fileOutput && term.IsTerminal(out.Fd()) && !f.Relative && !f.Print0 && !f.JSON && !f.Long
-		return a.outputNotes(c, filtered(notes, *f, matcher), *f, matcher, compactList)
+		return a.outputNotes(c, notes, *f, matcher, compactList)
 	}}
-	if !find {
+	if find {
+		cmd.Flags().StringVar(&note, "note", "", "search only this note ID or path")
+	} else {
 		cmd.Aliases = []string{"ls"}
 	}
 	addQueryFlags(cmd, f, find)
@@ -306,32 +264,38 @@ func (a *App) listCommand(find bool) {
 }
 func (a *App) tagsCommand() {
 	var note, category string
-	var counts, asJSON bool
+	var counts, asJSON, tree bool
 	cmd := &cobra.Command{Use: "tags", Short: "List and edit note tags", RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			return unknownSubcommand(cmd, args)
 		}
-		_, s, e := a.store()
+		_, s, e := a.store(cmd.Context())
 		if e != nil {
 			return e
 		}
 		var notes []store.Note
 		if note != "" {
-			n, e := s.Read(note)
+			n, e := s.Read(cmd.Context(), note)
 			if e != nil {
 				return e
 			}
 			notes = []store.Note{n}
 		} else {
-			notes, e = s.List()
+			notes, e = s.List(cmd.Context())
 			if e != nil {
 				return e
 			}
 		}
 		if category != "" {
-			notes = filtered(notes, queryFlags{Category: category, Sort: "path"}, nil)
+			notes, e = store.FilterNotes(cmd.Context(), notes, store.Query{Category: category})
+			if e != nil {
+				return e
+			}
 		}
 		m := store.TagCounts(notes)
+		if tree {
+			m, _ = store.TagTree(notes)
+		}
 		keys := make([]string, 0, len(m))
 		for k := range m {
 			keys = append(keys, k)
@@ -355,6 +319,7 @@ func (a *App) tagsCommand() {
 	cmd.Flags().StringVar(&note, "note", "", "tags in one note")
 	cmd.Flags().StringVar(&category, "category", "", "category and descendants")
 	cmd.Flags().BoolVar(&counts, "counts", false, "show note counts")
+	cmd.Flags().BoolVar(&tree, "tree", false, "include parent tags and their descendant counts")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "JSON counts")
 	for _, remove := range []bool{false, true} {
 		name := "add"
@@ -362,11 +327,11 @@ func (a *App) tagsCommand() {
 			name = "remove"
 		}
 		child := &cobra.Command{Use: name + " NOTE TAG...", Args: cobra.MinimumNArgs(2), RunE: func(cmd *cobra.Command, args []string) error {
-			c, s, e := a.store()
+			c, s, e := a.store(cmd.Context())
 			if e != nil {
 				return e
 			}
-			changed, e := s.TagsEdit(args[0], args[1:], remove)
+			changed, e := s.TagsEdit(cmd.Context(), args[0], args[1:], remove)
 			if e != nil {
 				return e
 			}
@@ -377,17 +342,58 @@ func (a *App) tagsCommand() {
 		}}
 		cmd.AddCommand(child)
 	}
+	var yes bool
+	set := &cobra.Command{Use: "set NOTE [TAG...]", Short: "Replace all tags on one note", Args: cobra.MinimumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		c, s, err := a.store(cmd.Context())
+		if err != nil {
+			return err
+		}
+		n, err := s.Read(cmd.Context(), args[0])
+		if err != nil {
+			return err
+		}
+		body, removed, err := store.ReplaceTags(n.Content, args[1:])
+		if err != nil {
+			return err
+		}
+		if len(removed) > 0 && !yes {
+			return usage("removing tags (including inline tags) requires --yes: %s", strings.Join(removed, ", "))
+		}
+		if bytes.Equal(n.Content, body) {
+			return nil
+		}
+		if err = s.Save(cmd.Context(), n.ID, n.Revision(), body); err != nil {
+			return err
+		}
+		return a.maybeSync(cmd.Context(), c, s, n.ID)
+	}}
+	set.Flags().BoolVar(&yes, "yes", false, "confirm removal of omitted tags, including inline tags")
+	cmd.AddCommand(set)
 	a.Root.AddCommand(cmd)
 }
 func (a *App) editCommand() {
-	a.Root.AddCommand(&cobra.Command{Use: "edit NOTE", Args: cobra.ExactArgs(1), Short: "Open a note in the TUI or configured editor", RunE: func(cmd *cobra.Command, args []string) error {
-		c, s, e := a.store()
+	var fromStdin bool
+	cmd := &cobra.Command{Use: "edit NOTE", Args: cobra.ExactArgs(1), Short: "Open a note in an editor or replace it from stdin", RunE: func(cmd *cobra.Command, args []string) error {
+		c, s, e := a.store(cmd.Context())
 		if e != nil {
 			return e
 		}
-		n, e := s.Read(args[0])
+		n, e := s.Read(cmd.Context(), args[0])
 		if e != nil {
 			return e
+		}
+		if fromStdin {
+			body, err := io.ReadAll(a.In)
+			if err != nil {
+				return err
+			}
+			if err = s.Save(cmd.Context(), n.ID, n.Revision(), body); err != nil {
+				return err
+			}
+			if bytes.Equal(body, n.Content) {
+				return nil
+			}
+			return a.maybeSync(cmd.Context(), c, s, n.ID)
 		}
 		if _, e = resolveEditor(c); errors.Is(e, errNoEditor) {
 			return tui.Run(cmd.Context(), c, s, n.ID, a.In, a.Out)
@@ -405,16 +411,18 @@ func (a *App) editCommand() {
 			return a.maybeSync(cmd.Context(), c, s, n.ID)
 		}
 		return nil
-	}})
+	}}
+	cmd.Flags().BoolVar(&fromStdin, "stdin", false, "replace the entire note with exact Markdown from stdin")
+	a.Root.AddCommand(cmd)
 }
 func (a *App) deleteCommand() {
 	var yes bool
 	cmd := &cobra.Command{Use: "delete NOTE", Aliases: []string{"rm"}, Args: cobra.ExactArgs(1), Short: "Delete one note", RunE: func(cmd *cobra.Command, args []string) error {
-		c, s, e := a.store()
+		c, s, e := a.store(cmd.Context())
 		if e != nil {
 			return e
 		}
-		n, e := s.Read(args[0])
+		n, e := s.Read(cmd.Context(), args[0])
 		if e != nil {
 			return e
 		}
@@ -423,7 +431,8 @@ func (a *App) deleteCommand() {
 			if !ok {
 				return usage("delete in a pipeline requires --yes")
 			}
-			if !term.IsTerminal(input.Fd()) {
+			output, outputOK := a.Err.(*os.File)
+			if !outputOK || !term.IsTerminal(input.Fd()) || !term.IsTerminal(output.Fd()) {
 				return usage("delete in a pipeline requires --yes")
 			}
 			fmt.Fprintf(a.Err, "Delete %s? [y/N] ", n.ID)
@@ -432,7 +441,7 @@ func (a *App) deleteCommand() {
 				return nil
 			}
 		}
-		if e = s.DeleteIfUnchanged(n.ID, sha256.Sum256(n.Content)); e != nil {
+		if e = s.DeleteIfUnchanged(cmd.Context(), n.ID, n.Revision()); e != nil {
 			return e
 		}
 		return a.maybeSync(cmd.Context(), c, s, n.ID)
@@ -442,11 +451,11 @@ func (a *App) deleteCommand() {
 }
 func (a *App) moveCommand() {
 	a.Root.AddCommand(&cobra.Command{Use: "move NOTE DESTINATION", Aliases: []string{"mv"}, Args: cobra.ExactArgs(2), Short: "Move a note", RunE: func(cmd *cobra.Command, args []string) error {
-		c, s, e := a.store()
+		c, s, e := a.store(cmd.Context())
 		if e != nil {
 			return e
 		}
-		n, e := s.Move(args[0], args[1])
+		n, e := s.Move(cmd.Context(), args[0], args[1])
 		if e != nil {
 			return e
 		}
@@ -458,11 +467,11 @@ func (a *App) moveCommand() {
 }
 func (a *App) categoriesCommand() {
 	a.Root.AddCommand(&cobra.Command{Use: "categories", Aliases: []string{"cats"}, Short: "List note-containing categories", RunE: func(cmd *cobra.Command, args []string) error {
-		_, s, e := a.store()
+		_, s, e := a.store(cmd.Context())
 		if e != nil {
 			return e
 		}
-		notes, e := s.List()
+		notes, e := s.List(cmd.Context())
 		if e != nil {
 			return e
 		}
@@ -496,7 +505,7 @@ func (a *App) journalCommand() {
 		if len(args) > 0 {
 			return unknownSubcommand(cmd, args)
 		}
-		c, s, e := a.store()
+		c, s, e := a.store(cmd.Context())
 		if e != nil {
 			return e
 		}
@@ -505,8 +514,8 @@ func (a *App) journalCommand() {
 			return usage("%v", e)
 		}
 		id := store.JournalID(day)
-		_, oldErr := s.Read(id)
-		n, e := s.EnsureJournal(date, c.Journal.Timezone, time.Now())
+		_, oldErr := s.Read(cmd.Context(), id)
+		n, e := s.EnsureJournal(cmd.Context(), date, c.Journal.Timezone, time.Now())
 		if e != nil {
 			return e
 		}
@@ -535,11 +544,11 @@ func (a *App) journalCommand() {
 		} else {
 			return usage("journal add requires TEXT or --stdin")
 		}
-		c, s, e := a.store()
+		c, s, e := a.store(cmd.Context())
 		if e != nil {
 			return e
 		}
-		n, e := s.AddJournal(date, c.Journal.Timezone, section, body, tags, time.Now())
+		n, e := s.AddJournal(cmd.Context(), date, c.Journal.Timezone, section, body, tags, time.Now())
 		if e != nil {
 			return e
 		}

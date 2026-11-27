@@ -12,12 +12,12 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/term"
+	store "github.com/naterator/notes"
 	"github.com/naterator/notes/internal/config"
-	"github.com/naterator/notes/internal/store"
 )
 
 func (m *Model) panel(title, body string, width, height int, focused bool) string {
-	background := m.panelBackground()
+	background := m.fieldBackground()
 	content := "\n" + m.paneTitle(title, width-4, focused, background) + "\n\n" + body
 	return m.paddedBlock(content, width, height, background)
 }
@@ -150,7 +150,7 @@ func helpLines(m *Model) []string {
 			lines = append(lines, fmt.Sprintf("%s%-18s %s", mark, b.Sequence, b.Description))
 		}
 	}
-	lines = append(lines, "  Vim NORMAL          h/j/k/l w/b/e 0/^/$ gg/G; counts", "  Vim INSERT          i/a/I/A/o/O; Esc returns to NORMAL", "  Vim edits           x dd/dw/d$ cc/cw/c$ yy/yw p/P u Ctrl+R .", "  Vim selection       v/V, motion, then y/d/c", "  Search              / then n/N; Esc cancels prompt", "  Traditional ENTRY   Ctrl+A/E line edges; Ctrl+K/U cut/uncut", "  Traditional COMMAND Esc from ENTRY; i/Enter resumes", "  Text entry          ? types ?; Ctrl+V quotes next key; Tab inserts tab", "  Ctrl+C              Cancel prompt/operator or leave entry", "", "Esc closes help · j/k scroll · Ctrl+F/B page")
+	lines = append(lines, "  Vim NORMAL          h/j/k/l w/b/e 0/^/$ gg/G Ctrl+F/B/D/U; counts", "  Vim INSERT          i/a/I/A/o/O; Esc returns to NORMAL", "  Vim edits           x r D C Y dd/dw/d$ cc/cw/c$ yy/yw p/P u Ctrl+R .", "  Vim selection       v/V, motion, then y/d/c", "  Search              / then n/N; Esc cancels prompt", "  Traditional ENTRY   Ctrl+A/E line edges; Ctrl+K/U cut/uncut", "  Traditional COMMAND Esc from ENTRY; i/Enter resumes", "  Text entry          ? types ?; Ctrl+V quotes next key; Tab inserts tab", "  Ctrl+C              Cancel prompt/operator or leave entry", "", "Esc closes help · j/k scroll · Ctrl+F/B page")
 	lines = append(lines, "", "Settings")
 	for _, b := range settingsBindings {
 		lines = append(lines, fmt.Sprintf("  %-18s %s", b.Sequence, b.Description))
@@ -222,8 +222,9 @@ func (m *Model) View() tea.View {
 	l := layoutFor(m.Width, m.Height)
 	p := m.palette()
 	canvas, panel := m.canvasBackground(), m.panelBackground()
-	searchContent := "\n" + m.paneTitle("Search all notes", l.width-4, m.Focus == "search", panel) + "\n" + m.Query.View()
-	search := m.paddedBlock(searchContent, l.width, 4, panel)
+	field := m.fieldBackground()
+	searchContent := "\n" + m.paneTitle("Search all notes", l.width-4, m.Focus == "search", field) + "\n" + m.Query.View()
+	search := m.paddedBlock(searchContent, l.width, 4, field)
 	sidebarContent := "\n" + m.paneTitle("Tags / notes", l.sidebarWidth-4, m.Focus == "tree", panel) + "\n\n" + m.treeView(l.bodyHeight-4, l.sidebarWidth-4)
 	sidebar := m.paddedBlock(sidebarContent, l.sidebarWidth, l.bodyHeight, panel)
 	content := m.textStyle(p.Muted, canvas).Render("Open a note from the sidebar\nCtrl+G n creates a new note")
@@ -255,7 +256,7 @@ func (m *Model) View() tea.View {
 	if m.Leader {
 		status, footerHint = leaderHints(l.width - 4)
 	}
-	footer := m.paddedBlock(clipText(status, l.width-4)+"\n"+m.textStyle(p.Muted, canvas).Render(clipText(footerHint, l.width-4)), l.width, 2, canvas)
+	footer := m.paddedBlock(clipText(status, l.width-4)+"\n"+m.textStyle(p.Key, canvas).Inherit(m.textStyle(p.Muted, canvas)).Render(clipText(footerHint, l.width-4)), l.width, 2, canvas)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, editor, m.block("", 2, l.bodyHeight, canvas), sidebar)
 	content = lipgloss.JoinVertical(lipgloss.Left, search, m.block("", l.width, 1, canvas), body, footer)
 	v := tea.NewView(m.paddedBlock("\n"+content+"\n", m.Width, m.Height, canvas))
@@ -269,11 +270,10 @@ func Run(ctx context.Context, c config.Config, s *store.Store, start string, in 
 	if !inputOK || !outputOK || !term.IsTerminal(input.Fd()) || !term.IsTerminal(output.Fd()) {
 		return fmt.Errorf("notes tui requires an interactive terminal")
 	}
-	m, e := NewModel(c, s, start)
+	m, e := NewModel(ctx, c, s, start)
 	if e != nil {
 		return e
 	}
-	m.Context = ctx
 	p := tea.NewProgram(m, tea.WithContext(ctx), tea.WithInput(in), tea.WithOutput(out))
 	_, e = p.Run()
 	return e

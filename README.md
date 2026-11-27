@@ -56,9 +56,9 @@ Without an `origin` remote, notes stay local and automatic sync waits for one to
 ## Commands
 
 - `notes new "Idea" --tag inbox` creates a note and prints its path. Add `--category work`, `--path work/idea.md`, `--template FILE`, or `--stdin` as needed.
-- `notes show NOTE` prints exact Markdown; `notes edit NOTE` opens the TUI unless an external editor is configured with `EDITOR`, `VISUAL`, or `notes config set editor '["vim"]'`.
-- `notes list` (`l`, `ls`) shows `base: REPO/` and repository-relative paths without a leading slash in a terminal. Each entry can be used with `notes delete NOTE`. In a pipeline it prints absolute paths; `notes find QUERY` also prints paths. Use `--tag`, `--category`, `--sort`, `--limit`, `--relative`, `--print0`, `--json`, or `--long`; `find` also accepts `--regex` and `--matches`.
-- `notes tags`, `notes tags add NOTE TAG...`, and `notes tags remove NOTE TAG...` manage `#tags` in Markdown. Inline tags count; code, URLs, and escaped hashes do not.
+- `notes show NOTE` prints exact Markdown. `notes edit NOTE` opens the TUI unless an external editor is configured. Use `notes edit NOTE --stdin < revised.md` to replace the entire note with exact Markdown from stdin.
+- `notes list` (`l`, `ls`) shows `base: REPO/` and repository-relative paths without a leading slash in a terminal. Each entry can be used with `notes delete NOTE`. In a pipeline it prints absolute paths; `notes find QUERY` also prints paths. Use `--tag` for exact tags, `--tag-prefix` for a tag and its descendants, or `--untagged`. Both commands also accept `--category`, `--sort`, `--limit`, `--relative`, `--print0`, `--json`, and `--long`. Use `notes find QUERY --note NOTE --matches` to show matching lines in one note, and `--regex` for a regular expression.
+- `notes tags`, `notes tags add NOTE TAG...`, and `notes tags remove NOTE TAG...` manage `#tags` in Markdown. Use `notes tags --tree --counts` to see the sidebar’s tag counts, including ancestors. `notes tags set NOTE TAG...` replaces the tag set. Pass `--yes` to remove omitted tags, including inline tags. Code, URLs, and escaped hashes are ignored.
 - `notes move NOTE DESTINATION` (`mv`), `notes delete NOTE --yes` (`rm`), and `notes categories` (`cats`) manage files and folders.
 - `notes journal` prints today's journal path. `notes journal add "Reviewed notes" --section actions --tag work` appends an entry; use `--date YYYY-MM-DD` for another day.
 - `notes sync` (`save`) commits note changes, pulls from `origin`, and pushes. `notes sync status --json` inspects local state without network access.
@@ -86,21 +86,36 @@ notes find 'thought' --print0 | xargs -0 -n 1 cat
 - `Tab` cycles search → tree → editor. In editor text entry, Tab inserts a real tab; press `Esc` before using Tab to change focus. Shift+Tab cycles backward outside entry mode.
 - `?` opens help in command/navigation mode and types `?` during text entry. `Ctrl+G h` always opens help. `/` in the all-notes search opens search within the current note; `Ctrl+V` then `/` inserts a literal slash in the all-notes query.
 - `:` in command mode opens built-in commands such as `:new`, `:tags`, `:find`, `:sync`, `:settings`/`:config`, `:themes`, `:w`, `:q`, and `:wq`. It is not a shell.
-- Vim mode supports `h/j/k/l`, `w/b/e`, `0/^/$`, `gg/G`, counts, `i/a/I/A/o/O`, `x`, `dd/dw/d$`, `cc/cw/c$`, `yy/yw`, `p/P`, `u`, `Ctrl+R`, `.`, `v/V`, `/`, and `n/N`. This is a built-in subset, not full Vim. Traditional mode supports arrows, selection, `Ctrl+A/E`, `Ctrl+K/U`, and `Ctrl+O`.
+- In Vim normal mode, `gg` and `G` jump to the first and last line and `42G` jumps to line 42. Use `h/j/k/l`, `w/b/e`, `0/^/$`, and `Ctrl+F/B/D/U` to move. Edit with `i/a/I/A/o/O`, `x`, `r`, `D/C/Y`, `dd/dw/d$`, `cc/cw/c$`, `yy/yw`, and `p/P`. Use `u` to undo, `Ctrl+R` to redo, `.` to repeat common edits, `v/V` to select, and `/` then `n/N` to search. Traditional mode supports arrows, selection, `Ctrl+A/E`, `Ctrl+K/U`, and `Ctrl+O`.
 - The TUI edits files up to 2 MiB. Configure an external editor to use `notes edit NOTE` for larger files. Autosave checks for external changes and offers a recovery draft instead of overwriting them.
 
 ## Settings and sync
 
-- Defaults include `theme = "catppuccin-mocha"`, `git.auto_sync = true`, `git.max_interval = "5m"`, and `tui.autosave_delay = "1s"`.
-- Themes include `catppuccin-mocha`, `catppuccin-frappe`, `catppuccin-macchiato`, `catppuccin-latte`, `nord`, `gruvbox-dark`, `solarized-light`, and `terminal`.
-- Original dark themes: `midnight` (navy/ice blue), `graphite` (charcoal/silver), `ocean` (teal/turquoise), `pine` (forest/sage), `ember` (soot/copper), `amethyst` (plum/lavender), and `rose` (burgundy/pink).
-- Original light themes: `sand` (cream/ochre), `mint` (pale green/teal), and `blueprint` (cool white/blue). Set one with `notes config set theme NAME` or preview all 18 with `:themes`.
+- The default theme is qbitctl’s arctic blue-gray `default`. The other qbitctl themes are `ocean`, `forest`, `amber`, `rose`, `violet`, `mono`, `tookie`, `dracula`, `solarized`, `gruvbox`, `catppuccin`, `high-contrast`, `paper`, `midnight`, `terminal`, and `sunset`.
+- `mocha` and `frappe` preserve the original Notes palettes. `history` also selects the previous Notes default, Mocha. Existing `catppuccin-mocha` and `catppuccin-frappe` settings still work. The previous Notes versions of `midnight`, `ocean`, `rose`, and `terminal` are available as `notes-midnight`, `notes-ocean`, `notes-rose`, and `terminal-native`.
+- Run `notes config themes` to list themes, `notes config set theme NAME` to save one, or `notes --theme NAME tui` to try it for one launch. Sync and autosave defaults are `git.auto_sync = true`, `git.max_interval = "5m"`, and `tui.autosave_delay = "1s"`.
 - Open interactive settings with `Ctrl+G c` or `:settings`. Search grouped settings, press Enter to edit/save one value, and use `Ctrl+R` to remove its saved preference. Esc cancels an edit or closes settings; `Ctrl+G h` shows help.
 - `:themes` previews schemes while browsing; Enter saves the choice and Esc restores the original appearance. Settings shows saved values and their effective source, including active environment/flag overrides.
 - Repository changes apply on the next launch and do not move notes. Editor keys, colors, and future autosave/sync settings can change during the session; selecting editor mode `ask` restores the prompt on the next launch. Config edits use the same validation and TOML rewriting as `notes config set`, including its comment/formatting behavior.
 - Use `notes config render` for effective settings. Explicit flags override supported environment variables, which override TOML and defaults. `--theme`, `--color auto|always|never`, and `--no-color` control colors.
 - Git due checks run after note-changing CLI commands and on a timer while the TUI is open. A closed CLI cannot sync on a wall-clock deadline; schedule `notes sync` with your OS if needed.
 - Sync stages Markdown changes only, fetches, commits when needed, pulls, then pushes. Conflicts and offline failures leave local changes intact and pending; resolve them with Git and rerun `notes sync`.
+
+## Go API
+
+Import `github.com/naterator/notes` to use the same local Markdown store as the CLI and TUI. Supply absolute paths for the notebook and state directories. Each operation takes a context. Share the state directory with other Notes processes that write to the same notebook.
+
+```go
+book := notes.New(repoDir, stateDir)
+note, err := book.Read(ctx, "work/ideas.md")
+if err != nil {
+    return err
+}
+body := []byte("# Ideas\n\nOne more idea.\n")
+return book.Save(ctx, note.ID, note.Revision(), body)
+```
+
+`Save` reports `notes.ErrChanged` if another writer has changed the file since the read. The Go package works on local files. The CLI and TUI manage Git initialization and syncing.
 
 ## Updates and license
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/naterator/notes/internal/config"
 	"github.com/naterator/notes/internal/syncgit"
+	"github.com/naterator/notes/internal/theme"
 	"github.com/naterator/notes/internal/tui"
 	"github.com/naterator/notes/internal/update"
 	"github.com/pelletier/go-toml/v2"
@@ -106,6 +107,14 @@ func (a *App) configCommands() {
 		_, e = config.Load(path)
 		return e
 	}})
+	cmd.AddCommand(&cobra.Command{Use: "themes", Short: "List CLI and TUI color themes", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+		for _, scheme := range theme.List() {
+			if _, err := fmt.Fprintf(a.Out, "%s\t%s\n", scheme.ID, scheme.Description); err != nil {
+				return err
+			}
+		}
+		return nil
+	}})
 	for _, child := range cmd.Commands() {
 		if child.Name() == "get" || child.Name() == "set" || child.Name() == "unset" {
 			child.ValidArgsFunction = func(command *cobra.Command, args []string, prefix string) ([]string, cobra.ShellCompDirective) {
@@ -117,6 +126,9 @@ func (a *App) configCommands() {
 					return keys, cobra.ShellCompDirectiveNoFileComp
 				}
 				if command.Name() == "set" && len(args) == 1 {
+					if args[0] == "theme" {
+						return theme.AcceptedNames(), cobra.ShellCompDirectiveNoFileComp
+					}
 					for _, d := range config.Settings() {
 						if d.Key == args[0] {
 							return d.Options, cobra.ShellCompDirectiveNoFileComp
@@ -136,7 +148,7 @@ func (a *App) syncCommands() {
 		if len(args) != 0 {
 			return unknownSubcommand(cmd, args)
 		}
-		c, s, e := a.store()
+		c, s, e := a.store(cmd.Context())
 		if e != nil {
 			return e
 		}
@@ -145,7 +157,7 @@ func (a *App) syncCommands() {
 	}}
 	cmd.Flags().StringVarP(&message, "message", "m", "", "commit message")
 	status := &cobra.Command{Use: "status", Short: "Show local Git sync state", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
-		c, s, e := a.store()
+		c, s, e := a.store(cmd.Context())
 		if e != nil {
 			return e
 		}
@@ -166,7 +178,7 @@ func (a *App) syncCommands() {
 }
 func (a *App) miscCommands() {
 	a.Root.AddCommand(&cobra.Command{Use: "tui [NOTE]", Short: "Open interactive notes", Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		c, s, e := a.store()
+		c, s, e := a.store(cmd.Context())
 		if e != nil {
 			return e
 		}

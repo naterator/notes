@@ -1,8 +1,8 @@
-package store
+package notes
 
 import (
 	"bytes"
-	"crypto/sha256"
+	"context"
 	"fmt"
 	"regexp"
 	"sort"
@@ -234,8 +234,8 @@ func RemoveTags(b []byte, tags []string) ([]byte, error) {
 	}
 	return out, nil
 }
-func (s *Store) TagsEdit(id string, tags []string, remove bool) (bool, error) {
-	n, err := s.Read(id)
+func (s *Store) TagsEdit(ctx context.Context, id string, tags []string, remove bool) (bool, error) {
+	n, err := s.Read(ctx, id)
 	if err != nil {
 		return false, err
 	}
@@ -251,7 +251,7 @@ func (s *Store) TagsEdit(id string, tags []string, remove bool) (bool, error) {
 	if bytes.Equal(next, n.Content) {
 		return false, nil
 	}
-	if err := s.Save(id, sha256.Sum256(n.Content), next); err != nil {
+	if err := s.Save(ctx, id, n.Revision(), next); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -271,4 +271,68 @@ func ValidateTag(tag string) error {
 		return fmt.Errorf("%w", err)
 	}
 	return nil
+}
+
+// ReplaceTags returns Markdown containing the desired tags and the names of
+// any tags removed, including inline tags. Unchanged tags retain their source.
+func ReplaceTags(content []byte, desired []string) (body []byte, removed []string, err error) {
+	clean, err := cleanTags(desired)
+	if err != nil {
+		return nil, nil, err
+	}
+	wanted := make(map[string]bool, len(clean))
+	for _, tag := range clean {
+		wanted[tag] = true
+	}
+	for _, tag := range Tags(content) {
+		if !wanted[tag] {
+			removed = append(removed, tag)
+		}
+	}
+	body = content
+	if len(removed) > 0 {
+		body, err = RemoveTags(body, removed)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	if len(clean) > 0 {
+		body, err = AddTags(body, clean)
+	}
+	return body, removed, err
+}
+
+// HasTagPrefix reports whether a note has the tag itself or a descendant.
+func (n Note) HasTagPrefix(tag string) bool {
+	tag = strings.ToLower(strings.TrimPrefix(tag, "#"))
+	for _, own := range n.Tags {
+		if own == tag || strings.HasPrefix(own, tag+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// TagTree counts notes once per tag or ancestor. It also reports how many
+// notes have no tags.
+func TagTree(notes []Note) (counts map[string]int, untagged int) {
+	counts = make(map[string]int)
+	for _, n := range notes {
+		if len(n.Tags) == 0 {
+			untagged++
+		}
+		seen := make(map[string]bool)
+		for _, tag := range n.Tags {
+			for tag != "" && !seen[tag] {
+				seen[tag] = true
+				counts[tag]++
+				end := strings.LastIndexByte(tag, '/')
+				if end < 0 {
+					break
+				}
+				tag = tag[:end]
+			}
+		}
+	}
+	return counts, untagged
 }

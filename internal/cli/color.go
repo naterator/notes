@@ -20,7 +20,7 @@ func humanColor(out io.Writer, c config.Config, kind, value string) string {
 	if !theme.Enabled(c.Color, terminal) {
 		return value
 	}
-	if c.Theme == "terminal" {
+	if c.Theme == "terminal-native" {
 		code := "36"
 		if kind == "muted" {
 			code = "2"

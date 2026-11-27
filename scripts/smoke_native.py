@@ -202,6 +202,41 @@ def main() -> int:
         saved = notes("show", "smoke.md")
         if b"via TUI" not in saved:
             raise RuntimeError(f"TUI save did not persist: {saved[:150]!r}; terminal tail: {output[-600:]!r}")
+        # Exercise normal-mode navigation through long, wrapped Markdown and
+        # compare exact document bytes across the CLI and the editor.
+        markdown = b"# Jump\n" + ((b"wrapped " * 35) + b"\n") * 34 + b"  BOTTOM\n"
+        replacement = subprocess.run(
+            [binary, "--config", str(config), "--repo", str(repo), "edit", "smoke.md", "--stdin"],
+            input=markdown, stdout=subprocess.PIPE, check=True, env=env,
+        )
+        if replacement.stdout or notes("show", "smoke.md") != markdown:
+            raise RuntimeError("edit --stdin failed to replace exact Markdown")
+        drive_tui(binary, config, repo, env, (
+            (b"G", b"BOTTOM"), b"r", b"2", b"r", b"?", b"u", b"u",
+            b"A", b" reached", b"\x1b", b"g", b"g",
+            b"A", b" via TUI", b"\x1b", b"\x07", b"s", b"\x07", b"q",
+        ))
+        saved = notes("show", "smoke.md")
+        if saved != markdown.replace(b"# Jump", b"# Jump via TUI").replace(b"BOTTOM", b"BOTTOM reached"):
+            raise RuntimeError("G or gg edited the wrong logical line")
+        if notes("find", "BOTTOM reached", "--note", "smoke.md", "--matches", "--relative") != b"smoke.md:36:  BOTTOM reached\n":
+            raise RuntimeError("single-note search did not read back the TUI edit")
+        if notes("list", "--untagged", "--relative") != b"smoke.md\n":
+            raise RuntimeError("untagged filter failed")
+        notes("tags", "set", "smoke.md", "work/project")
+        if notes("list", "--tag-prefix", "work", "--relative") != b"smoke.md\n":
+            raise RuntimeError("hierarchical tag filter failed")
+        if json.loads(notes("tags", "--tree", "--json")) != {"journal": 1, "work": 1, "work/project": 1}:
+            raise RuntimeError("hierarchical tag counts failed")
+        rejected = subprocess.run(
+            [binary, "--config", str(config), "--repo", str(repo), "tags", "set", "smoke.md"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
+        )
+        if rejected.returncode != 2 or b"requires --yes" not in rejected.stderr:
+            raise RuntimeError("tags set removed a tag without confirmation")
+        notes("tags", "set", "smoke.md", "--yes")
+        if notes("tags", "--note", "smoke.md"):
+            raise RuntimeError("confirmed tag removal failed")
         notes("config", "set", "tui.editor_mode", "traditional")
         output = drive_tui(binary, config, repo, env, (b"\x07", b"e", b"\x05", b" traditional", b"\x1b", b"\x07", b"s", b"\x07", b"q"))
         saved = notes("show", "smoke.md")
@@ -238,7 +273,7 @@ def main() -> int:
                 b" settings after ", b"\x1b", b"\x07", b"s", b"\x07", b"q",
             ), probe_resize=True)
             rendered = json.loads(notes("config", "render", "--json"))
-            if rendered["theme"] != "catppuccin-mocha" or rendered["tui"]["autosave_delay"] != "2s" or rendered["default_category"] != "misc":
+            if rendered["theme"] != "default" or rendered["tui"]["autosave_delay"] != "2s" or rendered["default_category"] != "misc":
                 raise RuntimeError(f"settings save/cancel/reset failed: {rendered!r}; tail {output[-800:]!r}")
             if "theme =" in config.read_text():
                 raise RuntimeError("theme reset materialized a default")
@@ -251,11 +286,10 @@ def main() -> int:
         ), extra_flags=("--theme", "gruvbox-dark", "--no-color"))
         if notes("config", "get", "theme").strip() != b"nord" or b"flag --theme" not in output:
             raise RuntimeError(f"settings launch override lost: {output[-800:]!r}")
-        for theme in (
-            "catppuccin-mocha", "catppuccin-frappe", "catppuccin-macchiato", "catppuccin-latte",
-            "nord", "gruvbox-dark", "solarized-light", "midnight", "graphite", "ocean", "pine",
-            "ember", "amethyst", "rose", "sand", "mint", "blueprint", "terminal",
-        ):
+        themes = [line.split("\t", 1)[0] for line in notes("config", "themes").decode().splitlines()]
+        if themes[0] != "default" or not {"mocha", "frappe", "history", "terminal-native"} <= set(themes):
+            raise RuntimeError(f"theme catalogue is missing expected choices: {themes!r}")
+        for theme in themes:
             notes("config", "set", "theme", theme)
             drive_tui(binary, config, repo, color_env, (b"\x07", b"q"))
         notes("sync")

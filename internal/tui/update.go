@@ -2,7 +2,6 @@ package tui
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"slices"
@@ -10,7 +9,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/naterator/notes/internal/store"
+	store "github.com/naterator/notes"
 	"github.com/naterator/notes/internal/syncgit"
 )
 
@@ -64,12 +63,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Message = e.Error()
 			}
 			if m.Active != nil && !m.Dirty {
-				if n, e := m.Store.Read(m.Active.ID); e == nil && string(n.Content) != m.Editor.Value() {
+				if n, e := m.Store.Read(m.Context, m.Active.ID); e == nil && string(n.Content) != m.Editor.Value() {
 					m.Active = &n
 					m.Editor = ptrEditor(NewEditor(m.Flavor, string(n.Content)))
 					m.sizeEditor()
 					m.focus(m.Focus)
-					m.Saved = sha256Sum(n.Content)
+					m.Saved = n.Revision()
 				}
 			}
 		}
@@ -115,7 +114,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
-func sha256Sum(b []byte) [32]byte { return sha256.Sum256(b) }
 func (m *Model) handleKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := keyName(k)
 	if m.SyncRunning && m.Overlay == "" && m.Focus == "editor" && !m.Leader {
@@ -187,7 +185,8 @@ func (m *Model) handleKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	entry := m.Focus == "search" && m.SearchMode == "INPUT" || m.Focus == "editor" && m.Editor != nil && (m.Editor.Mode == "INSERT" || m.Editor.Mode == "ENTRY")
-	if key == "?" && !entry {
+	replacing := m.Focus == "editor" && m.Editor != nil && m.Editor.Prefix == "r"
+	if key == "?" && !entry && !replacing {
 		return m, m.action(actionForSequence("?"))
 	}
 	if key == "ctrl+v" && entry {
@@ -237,7 +236,7 @@ func (m *Model) handleKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if key == "/" && m.Focus == "search" {
 		return m, m.action(actionForSequence(key))
 	}
-	if !entry && key == ":" {
+	if !entry && !replacing && key == ":" {
 		return m, m.action(actionForSequence(key))
 	}
 	switch m.Focus {
@@ -300,7 +299,7 @@ func (m *Model) handleKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.Message = "Sync in progress; editor input resumes shortly"
 			return m, nil
 		}
-		if m.Editor.Mode == "NORMAL" || m.Editor.Mode == "COMMAND" {
+		if !replacing && (m.Editor.Mode == "NORMAL" || m.Editor.Mode == "COMMAND") {
 			if key == "/" {
 				m.find()
 				return m, nil
@@ -506,13 +505,13 @@ func (m *Model) handleOverlay(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case "conflict":
 		if key == "r" {
-			n, e := m.Store.Read(m.Active.ID)
+			n, e := m.Store.Read(m.Context, m.Active.ID)
 			if e != nil {
 				m.Message = e.Error()
 			} else {
 				m.Active = &n
 				m.Editor = ptrEditor(NewEditor(m.Flavor, string(n.Content)))
-				m.Saved = sha256Sum(n.Content)
+				m.Saved = n.Revision()
 				m.Dirty = false
 				m.closeOverlay()
 			}
@@ -542,7 +541,7 @@ func (m *Model) handleOverlay(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			title := m.Fields[0].Value()
 			cat := m.Fields[1].Value()
 			tags := strings.Fields(m.Fields[2].Value())
-			n, e := m.Store.Create(store.NewOptions{Title: title, Category: cat, Tags: tags})
+			n, e := m.Store.Create(m.Context, store.NewOptions{Title: title, Category: cat, Tags: tags})
 			if e != nil {
 				m.Message = e.Error()
 				return m, nil
@@ -575,17 +574,12 @@ func (m *Model) handleOverlay(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if key == "enter" {
-			desired := strings.Fields(m.Prompt.Value())
-			want := map[string]bool{}
-			for _, t := range desired {
-				want[strings.ToLower(strings.TrimPrefix(t, "#"))] = true
+			_, removed, err := store.ReplaceTags(m.Active.Content, strings.Fields(m.Prompt.Value()))
+			if err != nil {
+				m.Message = err.Error()
+				return m, nil
 			}
-			m.PendingRemove = nil
-			for _, t := range m.Active.Tags {
-				if !want[t] {
-					m.PendingRemove = append(m.PendingRemove, t)
-				}
-			}
+			m.PendingRemove = removed
 			if len(m.PendingRemove) > 0 {
 				m.Overlay = "confirm-tags"
 				m.Message = tagRemovalPreview(m.Active.Content, m.PendingRemove)
@@ -724,25 +718,13 @@ func (m *Model) applyTags() bool {
 	if m.Active == nil {
 		return false
 	}
-	wanted := strings.Fields(m.Prompt.Value())
-	b := append([]byte{}, m.Active.Content...)
-	var e error
-	if len(m.PendingRemove) > 0 {
-		b, e = store.RemoveTags(b, m.PendingRemove)
-		if e != nil {
-			m.Message = e.Error()
-			return false
-		}
-	}
-	if len(wanted) > 0 {
-		b, e = store.AddTags(b, wanted)
-		if e != nil {
-			m.Message = e.Error()
-			return false
-		}
+	b, _, e := store.ReplaceTags(m.Active.Content, strings.Fields(m.Prompt.Value()))
+	if e != nil {
+		m.Message = e.Error()
+		return false
 	}
 	changed := !bytes.Equal(b, m.Active.Content)
-	if e = m.Store.Save(m.Active.ID, m.Saved, b); e != nil {
+	if e = m.Store.Save(m.Context, m.Active.ID, m.Saved, b); e != nil {
 		m.Message = e.Error()
 		return false
 	}
@@ -751,7 +733,7 @@ func (m *Model) applyTags() bool {
 	}
 	warning := ""
 	warning = m.markChanged(m.Active.ID)
-	n, e := m.Store.Read(m.Active.ID)
+	n, e := m.Store.Read(m.Context, m.Active.ID)
 	if e != nil {
 		m.Message = e.Error()
 		return false
@@ -759,7 +741,7 @@ func (m *Model) applyTags() bool {
 	m.Active = &n
 	w, h := layoutFor(m.Width, m.Height).editorSize()
 	m.Editor = editorAfterTagEdit(m.Editor, string(n.Content), w, h)
-	m.Saved = sha256Sum(n.Content)
+	m.Saved = n.Revision()
 	m.Dirty = false
 	if e = m.refresh(); e != nil {
 		m.Message = e.Error()
